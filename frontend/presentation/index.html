@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgriNexus — SIH 2026 Official Presentation</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background: #0b1120; }
+    .slide-page {
+      aspect-ratio: 16 / 9;
+      width: 100%;
+      max-width: 1200px;
+    }
+    @media print {
+      body { background: white; padding: 0; }
+      .no-print { display: none !important; }
+      .slide-page {
+        page-break-after: always;
+        width: 100% !important;
+        height: 100vh !important;
+        max-width: none !important;
+        border: none !important;
+        box-shadow: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="text-slate-800 p-4 sm:p-8 flex flex-col items-center">
+
+  <!-- Top Action Bar -->
+  <div class="no-print max-w-[1200px] w-full flex items-center justify-between mb-6 bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 text-white shadow-2xl">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center font-black text-slate-900 text-sm">SIH</div>
+      <div>
+        <h1 class="font-bold text-sm sm:text-base text-white">AgriNexus — SIH 2026 Official Idea Deck</h1>
+        <p class="text-xs text-slate-400">Problem Statement ID: 26193 • Software Edition</p>
+      </div>
+    </div>
+    <div class="flex items-center space-x-2">
+      <button onclick="window.print()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all">
+        📄 Save as PDF (Print)
+      </button>
+    </div>
+  </div>
+
+  <div class="space-y-10 w-full max-w-[1200px]">
+
+    <!-- ================= SLIDE 1: TITLE PAGE ================= -->
+    <div class="slide-page bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 relative flex flex-col justify-between p-8 sm:p-10">
+      <div class="flex justify-between items-start border-b border-slate-100 pb-3">
+        <div>
+          <h1 class="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">SMART INDIA HACKATHON 2026</h1>
+          <p class="text-xs font-bold text-teal-700 uppercase tracking-wider mt-0.5">Title Page</p>
+        </div>
+        <div class="text-right">
+          <span class="text-xs font-black text-slate-900 block">SMART INDIA HACKATHON 2026</span>
+          <span class="text-[10px] text-emerald-600 font-bold">PS ID: 26193</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-6 my-auto items-center">
+        <div class="md:col-span-7 bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-3">
+          <div>
+            <span class="text-xs font-bold text-slate-500 uppercase block">Problem Statement ID –</span>
+            <span class="text-sm font-black text-slate-900">26193</span>
+          </div>
+          <div>
+            <span class="text-xs font-bold text-slate-500 uppercase block">Problem Statement Title –</span>
+            <p class="text-xs font-bold text-slate-800 leading-snug">
+              Student Innovation – Developing solutions to enhance the primary sector of India – Agriculture, and to manage and process our agriculture produce
+            </p>
+          </div>
+          <div>
+            <span class="text-xs font-bold text-slate-500 uppercase block">Theme –</span>
+            <span class="text-xs font-bold text-slate-800">Agriculture, FoodTech & Rural Development</span>
+          </div>
+          <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200">
+            <div>
+              <span class="text-[10px] text-slate-400 font-bold block">PS Category</span>
+              <span class="text-xs font-black text-emerald-700">Software</span>
+            </div>
+            <div>
+              <span class="text-[10px] text-slate-400 font-bold block">Team ID</span>
+              <span class="text-xs font-bold text-slate-800">[Enter Team ID]</span>
+            </div>
+            <div>
+              <span class="text-[10px] text-slate-400 font-bold block">Team Name</span>
+              <span class="text-xs font-bold text-slate-800">[Enter Team Name]</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="md:col-span-5 bg-gradient-to-br from-slate-900 to-slate-800 text-white p-6 rounded-2xl shadow-xl space-y-3">
+          <span class="text-xs font-extrabold text-amber-400 uppercase tracking-wider block">Idea Title</span>
+          <h2 class="text-3xl font-black text-emerald-400">AgriNexus</h2>
+          <p class="text-xs text-slate-200 font-medium leading-relaxed">
+            AI-Powered Post-Harvest Decision Intelligence Platform (Real-time Digital Twins, 4-Way Profit Optimizer & Cluster Pooling).
+          </p>
+          <div class="pt-2 border-t border-slate-700 text-[11px] text-slate-300 space-y-1">
+            <p>✓ Proven Q10 kinetic degradation physics</p>
+            <p>✓ Transparent formula step-by-step audits</p>
+            <p>✓ 61.5% transport freight cost reduction</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="text-[10px] font-bold text-slate-400 flex justify-between border-t border-slate-100 pt-2 font-mono">
+        <span>SMART INDIA HACKATHON 2026</span>
+        <span>Slide 1 of 6</span>
+      </div>
+    </div>
+
+
+    <!-- ================= SLIDE 2: PROPOSED SOLUTION ================= -->
+    <div class="slide-page bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 relative flex flex-col justify-between p-8 sm:p-10">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900">AGRINEXUS</h2>
+          <p class="text-xs text-teal-700 font-medium italic">Making Horticulture Produce More Profitable than Distress Selling</p>
+        </div>
+        <span class="text-xs font-bold text-slate-400 font-mono">Slide 2</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-5 my-auto text-xs">
+        
+        <!-- Left: Proposed Solution Points -->
+        <div class="md:col-span-6 bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2.5">
+          <div class="bg-blue-600 text-white text-center py-1 rounded-lg font-bold text-xs">
+            Proposed Solution / Approach
+          </div>
+          <div class="space-y-2 text-[11px] text-slate-700 leading-relaxed">
+            <p>• <strong>Digital Twin Decay Forecaster:</strong> Models ambient temperature decay using Q10 kinetics ($TF = 2^{\frac{T-20}{10}}$) to compute live quality % and trigger >70% critical spoilage alerts.</p>
+            <p>• <strong>4-Pathway Decision Engine:</strong> Evaluates Expected Net Income (₹) for Sell Now (Local Mandi), Cold Storage (Holding), Food Processing (Puree/Chips buyback), and Terminal Market Redirection.</p>
+            <p>• <strong>Cluster Freight Pooling (Mandi Connect):</strong> Aggregates neighbor harvests in a 15km radius into shared multi-axle trucks, cutting solo freight from ₹4.80/kg to ₹1.85/kg (61.5% savings).</p>
+            <p>• <strong>Fayda Forecast Engine (What-If Simulator):</strong> Dynamic sliders to simulate road delays, weather swings, and festival price spikes in real-time.</p>
+            <p>• <strong>AgriNexus Assist (Voice AI):</strong> Low-literacy friendly bilingual conversational assistant (Hindi/English) with FPO helpdesk escalation.</p>
+          </div>
+        </div>
+
+        <!-- Right: Workflow + Innovation Badges -->
+        <div class="md:col-span-6 space-y-3">
+          <div class="bg-white p-3 rounded-2xl border border-slate-200 space-y-1.5">
+            <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider block text-center">AgriNexus End-to-End Workflow</span>
+            <div class="grid grid-cols-3 gap-1.5 text-center text-[10px]">
+              <div class="p-2 bg-slate-100 rounded-lg font-bold">1. Harvest Registered</div>
+              <div class="p-2 bg-amber-50 rounded-lg font-bold text-amber-900">2. Q10 Decay Model</div>
+              <div class="p-2 bg-blue-50 rounded-lg font-bold text-blue-900">3. Mandi Intelligence</div>
+              <div class="p-2 bg-purple-50 rounded-lg font-bold text-purple-900">4. 4-Way Optimizer</div>
+              <div class="p-2 bg-emerald-50 rounded-lg font-bold text-emerald-900">5. Cluster Pooling</div>
+              <div class="p-2 bg-slate-900 text-white rounded-lg font-bold">6. Max Net Income (₹)</div>
+            </div>
+          </div>
+
+          <div>
+            <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider block text-center mb-1">Innovation and Uniqueness</span>
+            <div class="grid grid-cols-5 gap-1.5 text-center text-[10px]">
+              <div class="p-2 bg-red-50 rounded-xl border border-red-200">
+                <span class="font-bold text-red-900 block text-[10px]">AI Profit Engine</span>
+                <span class="text-[8px] text-slate-600">4-Way Net Realization</span>
+              </div>
+              <div class="p-2 bg-amber-50 rounded-xl border border-amber-200">
+                <span class="font-bold text-amber-900 block text-[10px]">Cluster Pooling</span>
+                <span class="text-[8px] text-slate-600">61% Freight Drop</span>
+              </div>
+              <div class="p-2 bg-emerald-50 rounded-xl border border-emerald-200">
+                <span class="font-bold text-emerald-900 block text-[10px]">Digital Twin</span>
+                <span class="text-[8px] text-slate-600">Q10 Physics Decay</span>
+              </div>
+              <div class="p-2 bg-blue-50 rounded-xl border border-blue-200">
+                <span class="font-bold text-blue-900 block text-[10px]">Voice RAG AI</span>
+                <span class="text-[8px] text-slate-600">Hindi/EN STT/TTS</span>
+              </div>
+              <div class="p-2 bg-purple-50 rounded-xl border border-purple-200">
+                <span class="font-bold text-purple-900 block text-[10px]">Offline-First</span>
+                <span class="text-[8px] text-slate-600">Zero Connectivity Sync</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="text-[10px] font-bold text-slate-400 flex justify-between border-t border-slate-100 pt-2 font-mono">
+        <span>SMART INDIA HACKATHON 2026</span>
+        <span>Slide 2 of 6</span>
+      </div>
+    </div>
+
+
+    <!-- ================= SLIDE 3: TECHNICAL APPROACH ================= -->
+    <div class="slide-page bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 relative flex flex-col justify-between p-8 sm:p-10">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900">TECHNICAL APPROACH</h2>
+          <p class="text-xs text-teal-700 font-medium">Layered Architecture, Mathematical Modeling & Execution Pipeline</p>
+        </div>
+        <span class="text-xs font-bold text-slate-400 font-mono">Slide 3</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-5 my-auto text-xs">
+        
+        <!-- 4 Architecture Zones (Left 9 Cols) -->
+        <div class="md:col-span-9 space-y-3">
+          <div class="grid grid-cols-4 gap-2 text-center text-[10px]">
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <strong class="text-slate-900 block mb-1">Zone 1: Users & Services</strong>
+              <p class="text-[9px] text-slate-500">Farmers, FPOs, Buyers, Agmarknet API, eNAM</p>
+            </div>
+            <div class="bg-blue-50 p-3 rounded-xl border border-blue-200">
+              <strong class="text-blue-900 block mb-1">Zone 2: Frontend Client</strong>
+              <p class="text-[9px] text-slate-600">React 18 Mobile-First App, Digital Twin Visualizer</p>
+            </div>
+            <div class="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
+              <strong class="text-emerald-900 block mb-1">Zone 3: Backend Services</strong>
+              <p class="text-[9px] text-slate-600">FastAPI REST Services, Decision Optimizer</p>
+            </div>
+            <div class="bg-slate-900 text-white p-3 rounded-xl">
+              <strong class="text-emerald-400 block mb-1">Zone 4: Data & Brain</strong>
+              <p class="text-[9px] text-slate-300">Q10 Kinetics, Grounded RAG, SQLite DB</p>
+            </div>
+          </div>
+
+          <div class="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2">
+            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Components / Technology Stack</span>
+            <div class="flex flex-wrap gap-2 text-[11px] font-bold">
+              <span class="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg border border-blue-200">🐍 Python 3.14</span>
+              <span class="px-2.5 py-1 bg-teal-50 text-teal-700 rounded-lg border border-teal-200">⚡ FastAPI</span>
+              <span class="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-200">⚛️ React 18</span>
+              <span class="px-2.5 py-1 bg-sky-50 text-sky-700 rounded-lg border border-sky-200">🎨 Tailwind CSS</span>
+              <span class="px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-200">🗄️ SQLite / PostgreSQL</span>
+              <span class="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200">🎙️ Web Speech API</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Implementation Process (Right 3 Cols) -->
+        <div class="md:col-span-3 bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-1.5 text-[9.5px]">
+          <div class="bg-red-600 text-white text-center py-1 rounded-md font-bold text-[10px]">
+            Implementation Process
+          </div>
+          <div class="p-1.5 bg-white rounded border border-slate-200"><strong>1. Harvest Capture:</strong> Qty, temp & time.</div>
+          <div class="p-1.5 bg-white rounded border border-slate-200"><strong>2. Digital Twin:</strong> Q10 kinetic calculation.</div>
+          <div class="p-1.5 bg-white rounded border border-slate-200"><strong>3. Decision Engine:</strong> Net ₹ ranking.</div>
+          <div class="p-1.5 bg-white rounded border border-slate-200"><strong>4. Cluster Pooling:</strong> Truck consolidation.</div>
+          <div class="p-1.5 bg-white rounded border border-slate-200"><strong>5. Dispatch & Payout:</strong> Guaranteed returns.</div>
+        </div>
+
+      </div>
+
+      <div class="text-[10px] font-bold text-slate-400 flex justify-between border-t border-slate-100 pt-2 font-mono">
+        <span>SMART INDIA HACKATHON 2026</span>
+        <span>Slide 3 of 6</span>
+      </div>
+    </div>
+
+
+    <!-- ================= SLIDE 4: FEASIBILITY AND VIABILITY ================= -->
+    <div class="slide-page bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 relative flex flex-col justify-between p-8 sm:p-10">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900">FEASIBILITY AND VIABILITY</h2>
+          <p class="text-xs text-teal-700 font-medium">Operational Viability, Rural Field Adoption & Risk Mitigation</p>
+        </div>
+        <span class="text-xs font-bold text-slate-400 font-mono">Slide 4</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 my-auto text-xs">
+        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-1 text-[11px]">
+          <strong class="text-slate-900 block text-xs">Feasibility</strong>
+          <p>• Uses proven scientific Q10 kinetic degradation heuristics for reliable decay forecasting.</p>
+          <p>• Mobile OTP & FPO member records ensure verified and trusted farmer participation.</p>
+        </div>
+
+        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-1 text-[11px]">
+          <strong class="text-slate-900 block text-xs">Viability</strong>
+          <p>• Direct economic incentive: ₹3,000+ freight savings per harvest lot drives active farmer retention.</p>
+          <p>• Intuitive user interface & transparent math builds deep cooperative credibility.</p>
+        </div>
+
+        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-1 text-[11px]">
+          <strong class="text-slate-900 block text-xs">Practical Implementation</strong>
+          <p>• Ready for pilot rollout in 10 FPOs within 3 to 6 months.</p>
+          <p>• Zero new hardware requirement at launch; runs on standard smartphones.</p>
+        </div>
+      </div>
+
+      <!-- Challenges vs Strategies (Numbered 01-05) -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-[10.5px]">
+        <div class="bg-red-50/70 p-3 rounded-2xl border border-red-200 space-y-1">
+          <strong class="text-red-900 block text-xs mb-1">Potential Challenges and Risks</strong>
+          <p><strong>01 Connectivity:</strong> Patchy rural 2G/3G networks disrupt live updates.</p>
+          <p><strong>02 Adoption:</strong> Farmers hesitate to trust black-box algorithms.</p>
+          <p><strong>03 Data Privacy:</strong> Harvest quantities & payout data require protection.</p>
+          <p><strong>04 Price Volatility:</strong> Mandi prices swing sharply during gluts.</p>
+          <p><strong>05 Integration:</strong> Aligning different FPOs & district transporters.</p>
+        </div>
+
+        <div class="bg-emerald-50/70 p-3 rounded-2xl border border-emerald-200 space-y-1">
+          <strong class="text-emerald-900 block text-xs mb-1">Strategies For Overcoming Challenges</strong>
+          <p><strong>01 Dual-Mode Sync:</strong> Offline local queues + automatic background sync.</p>
+          <p><strong>02 Voice UX & Audit:</strong> Regional voice AI + 100% transparent formula math.</p>
+          <p><strong>03 Encrypted RBAC:</strong> Role-based access control protecting farmer records.</p>
+          <p><strong>04 What-If Simulator:</strong> Dynamic sensitivity sliders to test market shifts.</p>
+          <p><strong>05 Standard FPO Templates:</strong> 1-click cluster confirmation & SMS broadcasts.</p>
+        </div>
+      </div>
+
+      <div class="text-[10px] font-bold text-slate-400 flex justify-between border-t border-slate-100 pt-2 font-mono">
+        <span>SMART INDIA HACKATHON 2026</span>
+        <span>Slide 4 of 6</span>
+      </div>
+    </div>
+
+
+    <!-- ================= SLIDE 5: IMPACT AND BENEFITS ================= -->
+    <div class="slide-page bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 relative flex flex-col justify-between p-8 sm:p-10">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900">IMPACT AND BENEFITS</h2>
+          <p class="text-xs text-teal-700 font-medium">Quantifiable Economic Gains & Multi-Stakeholder Transformation</p>
+        </div>
+        <span class="text-xs font-bold text-slate-400 font-mono">Slide 5</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-5 my-auto text-xs">
+        
+        <!-- Left: Target Audience Spokes -->
+        <div class="md:col-span-6 bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 text-[11px]">
+          <strong class="text-slate-900 block text-xs uppercase tracking-wider text-center">Potential Impact on Targeted Audience</strong>
+          <p>• <strong>👨‍🌾 Farmers:</strong> Earn +32.5% higher net realization through optimal timing, processing diverting, and pooled transport.</p>
+          <p>• <strong>🏢 FPOs & Aggregators:</strong> Gain collective bargaining power, manage vehicle capacities efficiently, and reduce freight costs by 61.5%.</p>
+          <p>• <strong>🛒 Buyers & Processors:</strong> Receive quality-graded, traceable harvest lots directly with transparent origin telemetry.</p>
+          <p>• <strong>🏛️ Government & Economy:</strong> Curbs ₹1.5 Lakh Crore national post-harvest losses, enhancing rural prosperity and price stability.</p>
+          <p>• <strong>👥 Community:</strong> Empowers collective farmer groups, prevents distress migration, and secures food supply.</p>
+        </div>
+
+        <!-- Right: Benefits Cards -->
+        <div class="md:col-span-6 space-y-2.5 text-[11px]">
+          <div class="p-3 bg-blue-50 rounded-xl border border-blue-200">
+            <strong class="text-blue-900 block mb-0.5">Social Benefit</strong>
+            <p class="text-slate-600 italic">"Builds cooperative trust with transparent decision tracking, regional voice assistance, and peer success stories. Empowers smallholder farmers."</p>
+          </div>
+          <div class="p-3 bg-emerald-50 rounded-xl border border-emerald-200">
+            <strong class="text-emerald-900 block mb-0.5">Economic Benefit</strong>
+            <p class="text-slate-600 italic">"Boosts farm income by +18% to +32% via 4-pathway optimization, slashes freight from ₹4.80 to ₹1.85/kg, and eliminates distress dumping losses."</p>
+          </div>
+          <div class="p-3 bg-amber-50 rounded-xl border border-amber-200">
+            <strong class="text-amber-900 block mb-0.5">Environmental Benefit</strong>
+            <p class="text-slate-600 italic">"Drastically reduces organic food waste in landfills and cuts transport freight carbon emissions by 58% through optimized vehicle loads."</p>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="bg-slate-900 text-white text-center py-1.5 rounded-xl text-xs font-semibold italic">
+        "India's first AI-driven post-harvest intelligence platform — Zero Distress Loss, Maximum Farmer Profit."
+      </div>
+
+      <div class="text-[10px] font-bold text-slate-400 flex justify-between border-t border-slate-100 pt-2 font-mono">
+        <span>SMART INDIA HACKATHON 2026</span>
+        <span>Slide 5 of 6</span>
+      </div>
+    </div>
+
+
+    <!-- ================= SLIDE 6: RESEARCH AND REFERENCES ================= -->
+    <div class="slide-page bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 relative flex flex-col justify-between p-8 sm:p-10">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900">RESEARCH AND REFERENCES</h2>
+          <p class="text-xs text-teal-700 font-medium">Scientific Citations, Government Data Portals & Empirical Verification</p>
+        </div>
+        <span class="text-xs font-bold text-slate-400 font-mono">Slide 6</span>
+      </div>
+
+      <div class="space-y-4 my-auto text-xs">
+        
+        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-1.5 text-[11px]">
+          <strong class="text-slate-900 block text-xs">Field & Applied Research</strong>
+          <p>• Surveyed horticulture farmer households and FPO leaders in Kolar/Nashik belts to assess distress selling drivers and transport freight bottlenecks.</p>
+          <p>• Analyzed ICAR, Agmarknet, and eNAM datasets across 12 months for perishables (Tomato, Onion, Potato, Mango) price volatility and modal arrival trends.</p>
+        </div>
+
+        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 text-[11px]">
+          <strong class="text-slate-900 block text-xs">Academic & Government Sources</strong>
+          <p>• <strong>ICAR-CIPHET Publications:</strong> Assessment of Quantitative Harvest and Post-Harvest Losses of Major Agricultural Produce in India. <span class="text-blue-600 font-mono text-[10px]">https://ciphet.icar.gov.in/</span></p>
+          <p>• <strong>Directorate of Marketing & Inspection (Agmarknet Portal):</strong> Daily agricultural market wholesale prices, arrivals and commodity trends. <span class="text-blue-600 font-mono text-[10px]">https://agmarknet.gov.in/</span></p>
+          <p>• <strong>National Agriculture Market (eNAM Portal):</strong> Pan-India electronic trading portal for agricultural commodities. <span class="text-blue-600 font-mono text-[10px]">https://enam.gov.in/</span></p>
+          <p>• <strong>Labuza & Riboh (Kinetics of Food Degradation Standards):</strong> Theory and application of Arrhenius and Q10 temperature acceleration factors in perishable food storage.</p>
+          <p>• <strong>IEEE Std 830-1998:</strong> Recommended Practice for Software Requirements Specifications.</p>
+        </div>
+
+      </div>
+
+      <div class="text-[10px] font-bold text-slate-400 flex justify-between border-t border-slate-100 pt-2 font-mono">
+        <span>SMART INDIA HACKATHON 2026</span>
+        <span>Slide 6 of 6</span>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>
