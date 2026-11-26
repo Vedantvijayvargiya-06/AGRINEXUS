@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Production build
+dist/
+build/
+frontend/dist/
+
+# Testing & browser captures
+.pytest_cache/
+.coverage
+htmlcov/
+.playwright-cli/
+playwright-report/
+test-results/
+
+# Local Environment & Secrets
+.env
+.env.local
+*.backup.db
+
+# Persistent SQLite database files
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Allow example environment configuration
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
