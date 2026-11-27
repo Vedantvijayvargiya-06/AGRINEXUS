@@ -283,9 +283,123 @@ async function runE2ETests() {
         closeStore();
         cleanupDbFiles(tempDb);
       }
+
+      // Phase C: Isolated Demo OTP Inline Display & Role-Based Dashboard Redirect Verification
+      const demoDb = path.join(os.tmpdir(), `agrinexus-e2e-demootp-${Date.now()}.db`);
+      const prevDemoOtpFlag = process.env.DEMO_OTP_DISPLAY_ENABLED;
+      process.env.DEMO_OTP_DISPLAY_ENABLED = 'true';
+      resetRateLimits();
+      const demoApp = await createApp({ dbPath: demoDb, serveFrontend: false });
+      demoApp.use(express.static(distDir));
+      demoApp.get('*', (req, res) => {
+        res.sendFile(path.join(distDir, 'index.html'));
+      });
+      const demoServer = await new Promise((resolve) => {
+        const s = demoApp.listen(0, '127.0.0.1', () => resolve(s));
+      });
+      const demoBaseUrl = `http://127.0.0.1:${demoServer.address().port}`;
+
+      try {
+        const otpPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+        otpPage.on('pageerror', (err) => pageErrors.push(err.message));
+
+        await otpPage.goto(demoBaseUrl, { waitUntil: 'networkidle', timeout: 20000 });
+        await otpPage.getByRole('button', { name: 'Kisan OTP' }).click();
+
+        // 1. Non-demo number must show SMS gateway error and NEVER expose demo OTP banner
+        await otpPage.fill('#otp-phone', '9111122222');
+        await otpPage.getByRole('button', { name: 'Send OTP' }).click();
+        await otpPage.waitForSelector('text=SMS gateway is not configured', { timeout: 10000 });
+        check(
+          '20a. Non-demo phone shows SMS config message without exposing Demo OTP',
+          (await otpPage.locator('[data-testid="demo-otp-banner"]').count()) === 0 &&
+            (await otpPage.locator('#otp-code').count()) === 0
+        );
+
+        // 2. Demo Farmer phone displays inline DEMO OTP banner directly above OTP input
+        await otpPage.fill('#otp-phone', '9876543210');
+        await otpPage.getByRole('button', { name: 'Send OTP' }).click();
+        await otpPage.waitForSelector('[data-testid="demo-otp-banner"]', { timeout: 10000 });
+        const bannerText = await otpPage.locator('[data-testid="demo-otp-banner"]').innerText();
+        const farmerOtpMatch = bannerText.match(/DEMO OTP:\s*(\d{6})/);
+        check(
+          '20b. Predefined demo number displays inline 6-digit DEMO OTP banner',
+          Boolean(farmerOtpMatch) && bannerText.includes('Demo OTP is displayed here for testing purposes.')
+        );
+
+        if (process.env.E2E_CAPTURE_DEMO_OTP_SCREENSHOTS === '1') {
+          await otpPage.screenshot({ path: '/tmp/agrinexus-demo-otp-desktop.png', fullPage: true });
+          await otpPage.setViewportSize({ width: 390, height: 844 });
+          await otpPage.waitForTimeout(150);
+          await otpPage.screenshot({ path: '/tmp/agrinexus-demo-otp-mobile.png', fullPage: true });
+          await otpPage.setViewportSize({ width: 1440, height: 900 });
+        }
+
+        // Verify zero overflow on OTP login screen at 320px and 1440px
+        for (const vp of [{ width: 320, height: 667 }, { width: 1440, height: 900 }]) {
+          await otpPage.setViewportSize(vp);
+          await otpPage.waitForTimeout(100);
+          const metrics = await otpPage.evaluate(() => ({
+            scrollWidth: document.documentElement.scrollWidth,
+            innerWidth: window.innerWidth
+          }));
+          check(
+            `20c. OTP screen zero overflow at ${vp.width}x${vp.height}`,
+            metrics.scrollWidth <= metrics.innerWidth,
+            `scrollWidth=${metrics.scrollWidth} > innerWidth=${metrics.innerWidth}`
+          );
+        }
+
+        // 3. Changing phone number clears previously displayed Demo OTP
+        await otpPage.fill('#otp-phone', '9876543299');
+        check(
+          '20d. Changing phone number clears displayed Demo OTP',
+          (await otpPage.locator('[data-testid="demo-otp-banner"]').count()) === 0
+        );
+
+        // 4. Test OTP login & role-based dashboard redirect across all 4 roles
+        const roleScenarios = [
+          { phone: '9876543299', label: 'FPO Admin', expectSelector: 'button:has-text("Export CSV")' },
+          { phone: '9876543300', label: 'Buyer', expectSelector: 'table:has-text("Azadpur")' },
+          { phone: '9876543399', label: 'System Admin', expectSelector: 'button:has-text("Diagnostics")' },
+          { phone: '9876543210', label: 'Farmer', expectSelector: 'text=Active Batches' }
+        ];
+
+        for (const scenario of roleScenarios) {
+          resetRateLimits();
+          await otpPage.getByRole('button', { name: 'Kisan OTP' }).click();
+          await otpPage.fill('#otp-phone', scenario.phone);
+          await otpPage.getByRole('button', { name: 'Send OTP' }).click();
+          await otpPage.waitForSelector('[data-testid="demo-otp-banner"]', { timeout: 10000 });
+          const text = await otpPage.locator('[data-testid="demo-otp-banner"]').innerText();
+          const codeMatch = text.match(/DEMO OTP:\s*(\d{6})/);
+          if (!codeMatch) {
+            check(`20e. OTP displayed for ${scenario.label} (${scenario.phone})`, false);
+            continue;
+          }
+          await otpPage.fill('#otp-code', codeMatch[1]);
+          await otpPage.getByRole('button', { name: /Verify & Access Dashboard/i }).click();
+          await otpPage.waitForSelector(scenario.expectSelector, { timeout: 10000 });
+          check(`20e. OTP login redirects ${scenario.label} (${scenario.phone}) to role dashboard`, true);
+
+          await otpPage.getByRole('button', { name: 'Sign out of AgriNexus' }).click();
+          await otpPage.waitForSelector('text=Sign In to AgriNexus', { timeout: 10000 });
+        }
+
+        await otpPage.close();
+      } finally {
+        if (prevDemoOtpFlag === undefined) {
+          delete process.env.DEMO_OTP_DISPLAY_ENABLED;
+        } else {
+          process.env.DEMO_OTP_DISPLAY_ENABLED = prevDemoOtpFlag;
+        }
+        await new Promise((resolve) => demoServer.close(resolve));
+        closeStore();
+        cleanupDbFiles(demoDb);
+      }
     }
 
-    check('20. Zero uncaught page or console errors', pageErrors.length === 0 && consoleErrors.length === 0, `${pageErrors.concat(consoleErrors).join('; ')}`);
+    check('21. Zero uncaught page or console errors', pageErrors.length === 0 && consoleErrors.length === 0, `${pageErrors.concat(consoleErrors).join('; ')}`);
 
     await browser.close();
     console.log(`--- E2E Finished: ${failures} failure(s) ---`);
@@ -298,4 +412,5 @@ async function runE2ETests() {
 }
 
 runE2ETests();
+
 

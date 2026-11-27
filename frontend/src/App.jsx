@@ -29,6 +29,19 @@ function ViewFallback() {
   );
 }
 
+function getDefaultTabForRole(role) {
+  switch (role) {
+    case 'fpo_admin':
+      return 'reports';
+    case 'buyer':
+      return 'market';
+    case 'admin':
+      return 'admin';
+    default:
+      return 'dashboard';
+  }
+}
+
 export default function App() {
   const { currentUser, token, authInitialized, isLoginModalOpen, setIsLoginModalOpen } = useAuth();
   const { t } = useLanguage();
@@ -88,6 +101,7 @@ export default function App() {
       setActiveTab('dashboard');
       return;
     }
+    setActiveTab(getDefaultTabForRole(currentUser.role));
     setLoading(true);
     fetchBatches();
     fetchNotifications();
@@ -96,7 +110,7 @@ export default function App() {
       fetchNotifications();
     }, 15000);
     return () => clearInterval(interval);
-  }, [token, currentUser?.id, authInitialized]);
+  }, [token, currentUser?.id, currentUser?.role, authInitialized]);
 
   const handleMarkRead = async (notifId) => {
     const res = await apiFetch(`/api/notifications/${notifId}/read`, { method: 'PUT' });

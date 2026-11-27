@@ -7,7 +7,8 @@ import {
   OTP_EXPIRY_SECONDS,
   OTP_MAX_ATTEMPTS,
   OTP_RESEND_COOLDOWN_SECONDS,
-  DEMO_MODE
+  DEMO_MODE,
+  isDemoOtpDisplayEnabled
 } from './config.js';
 import {
   getUserById,
@@ -135,19 +136,42 @@ export function verifyOtp(phone, otpCode) {
   return true;
 }
 
-export function deliverOtp(phone, otpCode) {
-  if (DEMO_MODE) {
-    console.log(`[AgriNexus OTP - DEMO MODE] OTP for ${phone}: ${otpCode}`);
+export function deliverOtp(phone, otpCode, { isPredefinedDemo = false } = {}) {
+  if (isDemoOtpDisplayEnabled() && isPredefinedDemo) {
     return {
       delivered: true,
-      channel: 'demo_console',
-      message: `OTP generated successfully (Demo Mode). Demo OTP: ${otpCode}`
+      channel: 'demo_inline',
+      is_demo_otp: true,
+      demo_otp: otpCode,
+      message: 'Demo OTP generated. Enter the 6-digit OTP displayed below.'
+    };
+  }
+  if (DEMO_MODE) {
+    return {
+      delivered: true,
+      channel: 'demo_mode',
+      is_demo_otp: false,
+      demo_otp: null,
+      message: 'OTP generated successfully in local demo mode.'
+    };
+  }
+  const hasSmsProvider = Boolean((process.env.SMS_PROVIDER_API_KEY || '').trim());
+  if (hasSmsProvider) {
+    return {
+      delivered: true,
+      channel: 'sms',
+      is_demo_otp: false,
+      demo_otp: null,
+      message: 'A 6-digit OTP has been dispatched to your registered mobile number via SMS.'
     };
   }
   return {
     delivered: false,
     channel: 'sms',
-    message: 'SMS gateway is not configured in this environment. Set SMS_PROVIDER_API_KEY or use email/password login.'
+    is_demo_otp: false,
+    demo_otp: null,
+    message:
+      'SMS gateway is not configured in this environment. Set SMS_PROVIDER_API_KEY or use email/password login.'
   };
 }
 

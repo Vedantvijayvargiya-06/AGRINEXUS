@@ -55,6 +55,22 @@ export const OTP_RESEND_COOLDOWN_SECONDS = Math.max(
 export const DEMO_MODE =
   !IS_PRODUCTION && String(process.env.DEMO_MODE || 'false').toLowerCase() === 'true';
 
+// Predefined demo accounts eligible for inline OTP display on dedicated demo deployments
+export const DEMO_OTP_PHONES = new Set([
+  '9876543210',
+  '9876543211',
+  '9876543212',
+  '9876543299',
+  '9876543300',
+  '9876543399'
+]);
+
+export function isDemoOtpDisplayEnabled() {
+  return String(process.env.DEMO_OTP_DISPLAY_ENABLED || 'false').toLowerCase() === 'true';
+}
+
+export const DEMO_OTP_DISPLAY_ENABLED = isDemoOtpDisplayEnabled();
+
 export const ADMIN_BOOTSTRAP_PASSWORD = (process.env.ADMIN_BOOTSTRAP_PASSWORD || '').trim();
 
 export const DATABASE_PATH = (process.env.DATABASE_PATH || '').trim()

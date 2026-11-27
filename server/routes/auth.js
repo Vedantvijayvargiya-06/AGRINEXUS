@@ -12,8 +12,11 @@ import {
 } from '../store.js';
 import {
   DEMO_MODE,
+  DEMO_OTP_PHONES,
+  OTP_EXPIRY_SECONDS,
   IS_PRODUCTION,
-  RATE_LIMIT_AUTH_PER_MINUTE
+  RATE_LIMIT_AUTH_PER_MINUTE,
+  isDemoOtpDisplayEnabled
 } from '../config.js';
 import {
   HttpError,
@@ -126,9 +129,12 @@ router.post('/request-otp', (req, res, next) => {
     checkRateLimit(`otp_request:${clientIp}`, RATE_LIMIT_AUTH_PER_MINUTE, 60);
     checkRateLimit(`otp_request:${cleanPhone}`, 5, 60);
 
+    const isPredefinedDemo = DEMO_OTP_PHONES.has(cleanPhone);
+    const demoInlineActive = isPredefinedDemo && isDemoOtpDisplayEnabled();
+
     let user = getUserByPhone(cleanPhone);
     if (!user) {
-      if (DEMO_MODE && !IS_PRODUCTION) {
+      if (DEMO_MODE && !IS_PRODUCTION && !demoInlineActive) {
         user = createUser({
           name: `Farmer ${cleanPhone.slice(-4)}`,
           phone: cleanPhone,
@@ -141,14 +147,24 @@ router.post('/request-otp', (req, res, next) => {
           is_approved: true
         });
       } else {
+        const hasSmsProvider = Boolean((process.env.SMS_PROVIDER_API_KEY || '').trim());
         return res.json({
-          message: 'If this phone number is registered, an OTP has been sent.',
+          message: hasSmsProvider
+            ? 'If this phone number is registered, an OTP has been sent.'
+            : 'SMS gateway is not configured in this environment. Set SMS_PROVIDER_API_KEY or use email/password login.',
           channel: 'sms',
-          expires_in_seconds: 300,
+          delivered: hasSmsProvider,
+          expires_in_seconds: OTP_EXPIRY_SECONDS,
+          is_demo_otp: false,
+          demo_otp: null,
           demo_note: null,
           phone: cleanPhone
         });
       }
+    }
+
+    if (!user.is_approved) {
+      throw new HttpError(403, 'Account is pending administrator approval');
     }
 
     const now = new Date();
@@ -161,13 +177,16 @@ router.post('/request-otp', (req, res, next) => {
     }
 
     const { otpCode } = generateOtp(cleanPhone);
-    const deliveryResult = deliverOtp(cleanPhone, otpCode);
+    const deliveryResult = deliverOtp(cleanPhone, otpCode, { isPredefinedDemo });
 
     return res.json({
       message: deliveryResult.message,
       channel: deliveryResult.channel,
-      expires_in_seconds: 300,
-      demo_note: DEMO_MODE && !IS_PRODUCTION ? `Demo OTP: ${otpCode}` : null,
+      delivered: deliveryResult.delivered,
+      expires_in_seconds: OTP_EXPIRY_SECONDS,
+      is_demo_otp: Boolean(deliveryResult.is_demo_otp),
+      demo_otp: deliveryResult.is_demo_otp ? deliveryResult.demo_otp : null,
+      demo_note: DEMO_MODE && !IS_PRODUCTION && !deliveryResult.is_demo_otp ? `Demo OTP: ${otpCode}` : null,
       phone: cleanPhone
     });
   } catch (err) {
@@ -186,6 +205,7 @@ router.post('/login-otp', (req, res, next) => {
 
     const clientIp = req.ip || 'unknown';
     checkRateLimit(`otp_verify:${clientIp}`, 15, 60);
+    checkRateLimit(`otp_verify:${cleanPhone}`, 10, 60);
 
     const user = getUserByPhone(cleanPhone);
     if (!user) {
@@ -207,11 +227,13 @@ router.post('/login-otp', (req, res, next) => {
     try {
       verifyOtp(cleanPhone, otp);
     } catch (err) {
-      const nextFailed = (user.failed_attempts || 0) + 1;
-      if (nextFailed >= 5) {
-        updateUserAuthState(user.id, 0, new Date(now.getTime() + 15 * 60000));
-      } else {
-        updateUserAuthState(user.id, nextFailed, null);
+      if (err.status === 401) {
+        const nextFailed = (user.failed_attempts || 0) + 1;
+        if (nextFailed >= 5) {
+          updateUserAuthState(user.id, 0, new Date(now.getTime() + 15 * 60000));
+        } else {
+          updateUserAuthState(user.id, nextFailed, null);
+        }
       }
       throw err;
     }

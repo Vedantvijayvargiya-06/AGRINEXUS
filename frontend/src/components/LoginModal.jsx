@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { X, Smartphone, KeyRound, Lock, AlertCircle, CheckCircle2, ArrowRight, ShieldCheck, RefreshCw, Eye, EyeOff } from 'lucide-react';
@@ -13,6 +13,7 @@ export default function LoginModal({ isOpen, onClose }) {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
+  const [demoOtp, setDemoOtp] = useState('');
   const [cooldown, setCooldown] = useState(0);
 
   // Password Form State
@@ -34,31 +35,46 @@ export default function LoginModal({ isOpen, onClose }) {
     onClose();
   };
 
+  useEffect(() => {
+    if (cooldown <= 0) return undefined;
+    const timer = setTimeout(() => {
+      setCooldown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
+
   // 1. Request OTP
   const handleSendOtp = async (e) => {
     e?.preventDefault();
     setLocalError('');
     setStatusMsg('');
-    if (!phone || phone.length < 10) {
+    setDemoOtp('');
+    setOtp('');
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (!/^\d{10}$/.test(cleanPhone)) {
       setLocalError('Please enter a valid 10-digit phone number');
       return;
     }
 
     setLoading(true);
     try {
-      const res = await requestOtp(phone);
+      const res = await requestOtp(cleanPhone);
+      if (res.delivered === false && !res.demo_otp) {
+        setOtpSent(false);
+        setDemoOtp('');
+        setLocalError(
+          res.message ||
+            'SMS gateway is not configured in this environment. Set SMS_PROVIDER_API_KEY or use email/password login.'
+        );
+        return;
+      }
+
       setOtpSent(true);
+      if (res.is_demo_otp && res.demo_otp) {
+        setDemoOtp(String(res.demo_otp));
+      }
       setStatusMsg(res.message || 'OTP sent successfully');
       setCooldown(60);
-      const timer = setInterval(() => {
-        setCooldown((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
     } catch (err) {
       setLocalError(err.message || 'Failed to send OTP');
     } finally {
@@ -237,16 +253,25 @@ export default function LoginModal({ isOpen, onClose }) {
               <div className="flex flex-wrap sm:flex-nowrap gap-2">
                 <input
                   type="tel"
+                  maxLength={10}
                   required
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => {
+                    setPhone(e.target.value.replace(/\D/g, ''));
+                    setDemoOtp('');
+                    setOtp('');
+                    setOtpSent(false);
+                    setCooldown(0);
+                    setLocalError('');
+                    setStatusMsg('');
+                  }}
                   placeholder="Enter 10-digit mobile number"
                   className="flex-1 min-w-0 px-3 py-2 border border-slate-300 rounded-lg text-slate-900 font-mono text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={handleSendOtp}
-                  disabled={loading || cooldown > 0}
+                  disabled={loading || phone.length < 10 || cooldown > 0}
                   className="w-full sm:w-auto px-3 py-2 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-300 text-white rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0"
                 >
                   {cooldown > 0 ? `Resend (${cooldown}s)` : (otpSent ? 'Resend OTP' : 'Send OTP')}
@@ -256,6 +281,21 @@ export default function LoginModal({ isOpen, onClose }) {
                 A single-use 6-digit cryptographic OTP will be challenged. Valid for 5 minutes.
               </p>
             </div>
+
+            {otpSent && demoOtp && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 space-y-1"
+              >
+                <p className="text-xs font-mono font-extrabold tracking-wider text-slate-900 select-all">
+                  DEMO OTP: <span className="text-emerald-700">{demoOtp}</span>
+                </p>
+                <p className="text-[10px] text-amber-800">
+                  Demo OTP is displayed here for testing purposes.
+                </p>
+              </div>
+            )}
 
             {otpSent && (
               <div>
@@ -267,7 +307,7 @@ export default function LoginModal({ isOpen, onClose }) {
                   maxLength={6}
                   required
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                   placeholder="• • • • • •"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-center tracking-widest text-slate-900 font-mono text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none font-bold"
                 />

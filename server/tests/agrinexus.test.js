@@ -13,7 +13,7 @@ const { DecisionEngine } = await import('../services/decisionEngine.js');
 const { ClusterOptimizer } = await import('../services/clusterOptimizer.js');
 const { ReportingService } = await import('../services/reportingService.js');
 const { AgriNexusAssist } = await import('../services/agrinexusAssist.js');
-const { closeStore, getUserByEmail, updateUserApproval, updateUserAuthState, deleteOtpRecord } = await import('../store.js');
+const { closeStore, getUserByEmail, getUserByPhone, updateUserApproval, updateUserAuthState, upsertOtpRecord, deleteOtpRecord } = await import('../store.js');
 const { resetRateLimits, generateOtp } = await import('../security.js');
 const { createApp } = await import('../../server.js');
 
@@ -658,4 +658,173 @@ test('System Health & Diagnostics module enforces admin-only RBAC, runs safe che
     cleanupDbFiles(dbPath);
   }
 });
+
+test('Demo OTP flow: exposes inline demo_otp strictly for 6 predefined accounts when enabled, enforces expiry/reuse/attempts, and hides non-demo OTPs', async () => {
+  const dbPath = tempDbPath('agrinexus-demo-otp');
+  const prevFlag = process.env.DEMO_OTP_DISPLAY_ENABLED;
+  process.env.DEMO_OTP_DISPLAY_ENABLED = 'true';
+
+  const { server, baseUrl } = await startServer(dbPath);
+  try {
+    const predefinedAccounts = [
+      { phone: '9876543210', role: 'farmer' },
+      { phone: '9876543211', role: 'farmer' },
+      { phone: '9876543212', role: 'farmer' },
+      { phone: '9876543299', role: 'fpo_admin' },
+      { phone: '9876543300', role: 'buyer' },
+      { phone: '9876543399', role: 'admin' }
+    ];
+
+    // 1. All 6 predefined demo numbers receive a 6-digit demo_otp and authenticate to exact roles
+    for (const account of predefinedAccounts) {
+      resetRateLimits();
+      const reqRes = await fetch(`${baseUrl}/api/auth/request-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: account.phone })
+      });
+      assert.equal(reqRes.status, 200);
+      const reqJson = await reqRes.json();
+      assert.equal(reqJson.delivered, true);
+      assert.equal(reqJson.is_demo_otp, true);
+      assert.match(reqJson.demo_otp, /^\d{6}$/);
+      assert.equal(reqJson.demo_note, null);
+
+      const verifyRes = await fetch(`${baseUrl}/api/auth/login-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: account.phone, otp: reqJson.demo_otp })
+      });
+      assert.equal(verifyRes.status, 200);
+      const verifyJson = await verifyRes.json();
+      assert.equal(verifyJson.user.role, account.role);
+      assert.ok(verifyJson.access_token);
+
+      // 2. Single-use enforcement: reusing the same OTP immediately fails
+      const reuseRes = await fetch(`${baseUrl}/api/auth/login-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: account.phone, otp: reqJson.demo_otp })
+      });
+      assert.equal(reuseRes.status, 400);
+    }
+
+    // 3. Resend cooldown enforcement on active unused OTP
+    resetRateLimits();
+    deleteOtpRecord('9876543210');
+    const firstReq = await fetch(`${baseUrl}/api/auth/request-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: '9876543210' })
+    });
+    assert.equal(firstReq.status, 200);
+    const secondReq = await fetch(`${baseUrl}/api/auth/request-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: '9876543210' })
+    });
+    assert.equal(secondReq.status, 429);
+
+    // 4. 5-minute OTP expiration enforcement
+    deleteOtpRecord('9876543212');
+    const expReq = await fetch(`${baseUrl}/api/auth/request-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: '9876543212' })
+    });
+    const expJson = await expReq.json();
+    const { default: cryptoMod } = await import('node:crypto');
+    upsertOtpRecord('9876543212', {
+      otpHash: cryptoMod.createHash('sha256').update(expJson.demo_otp).digest('hex'),
+      createdAt: Date.now() / 1000 - 305,
+      attempts: 0,
+      used: false
+    });
+    const expiredLoginRes = await fetch(`${baseUrl}/api/auth/login-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: '9876543212', otp: expJson.demo_otp })
+    });
+    assert.equal(expiredLoginRes.status, 400);
+
+    // 5. Invalid OTP rejection & lockout after 5 wrong attempts
+    deleteOtpRecord('9876543211');
+    const lockReq = await fetch(`${baseUrl}/api/auth/request-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: '9876543211' })
+    });
+    const lockJson = await lockReq.json();
+    const wrongOtp = lockJson.demo_otp === '000000' ? '111111' : '000000';
+    for (let i = 0; i < 5; i++) {
+      const badRes = await fetch(`${baseUrl}/api/auth/login-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: '9876543211', otp: wrongOtp })
+      });
+      assert.equal(badRes.status, 401);
+    }
+    const lockedRes = await fetch(`${baseUrl}/api/auth/login-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: '9876543211', otp: lockJson.demo_otp })
+    });
+    assert.equal(lockedRes.status, 403);
+    const farmerUser = getUserByPhone('9876543211');
+    updateUserAuthState(farmerUser.id, 0, null);
+
+    // 6. Non-demo registered farmer AND arbitrary unregistered number NEVER receive demo_otp
+    resetRateLimits();
+    const signupRes = await fetch(`${baseUrl}/api/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Real Farmer',
+        phone: '9444433333',
+        email: 'real.farmer@example.com',
+        password: 'RealPassword123',
+        role: 'farmer'
+      })
+    });
+    assert.equal(signupRes.status, 201);
+
+    for (const nonDemoPhone of ['9444433333', '9111122222']) {
+      const nonDemoRes = await fetch(`${baseUrl}/api/auth/request-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: nonDemoPhone })
+      });
+      assert.equal(nonDemoRes.status, 200);
+      const nonDemoJson = await nonDemoRes.json();
+      assert.equal(nonDemoJson.delivered, false);
+      assert.equal(nonDemoJson.is_demo_otp, false);
+      assert.equal(nonDemoJson.demo_otp, null);
+      assert.equal(nonDemoJson.demo_note, null);
+      assert.match(nonDemoJson.message, /SMS gateway is not configured/i);
+    }
+
+    // 7. When DEMO_OTP_DISPLAY_ENABLED is disabled, even predefined demo numbers do NOT return demo_otp
+    process.env.DEMO_OTP_DISPLAY_ENABLED = 'false';
+    deleteOtpRecord('9876543210');
+    const disabledRes = await fetch(`${baseUrl}/api/auth/request-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: '9876543210' })
+    });
+    assert.equal(disabledRes.status, 200);
+    const disabledJson = await disabledRes.json();
+    assert.equal(disabledJson.delivered, false);
+    assert.equal(disabledJson.is_demo_otp, false);
+    assert.equal(disabledJson.demo_otp, null);
+  } finally {
+    if (prevFlag === undefined) {
+      delete process.env.DEMO_OTP_DISPLAY_ENABLED;
+    } else {
+      process.env.DEMO_OTP_DISPLAY_ENABLED = prevFlag;
+    }
+    await stopServer(server);
+    cleanupDbFiles(dbPath);
+  }
+});
+
 
