@@ -11,7 +11,9 @@ const CROPS = [
   { id: 'Potato', name: 'Potato', name_hi: 'आलू', defaultTemp: 24, shelfLife: '40 Days', icon: '🥔' },
   { id: 'Mango', name: 'Mango', name_hi: 'आम', defaultTemp: 29, shelfLife: '7 Days', icon: '🥭' },
   { id: 'Apple', name: 'Apple', name_hi: 'सेब', defaultTemp: 20, shelfLife: '21 Days', icon: '🍎' },
-  { id: 'Banana', name: 'Banana', name_hi: 'केला', defaultTemp: 27, shelfLife: '5 Days', icon: '🍌' }
+  { id: 'Banana', name: 'Banana', name_hi: 'केला', defaultTemp: 27, shelfLife: '5 Days', icon: '🍌' },
+  { id: 'Cauliflower', name: 'Cauliflower', name_hi: 'फूलगोभी', defaultTemp: 25, shelfLife: '5 Days', icon: '🥦' },
+  { id: 'Guava', name: 'Guava', name_hi: 'अमरूद', defaultTemp: 27, shelfLife: '6 Days', icon: '🍐' }
 ];
 
 export default function AddBatchModal({ isOpen, onClose, onBatchAdded }) {
@@ -34,14 +36,24 @@ export default function AddBatchModal({ isOpen, onClose, onBatchAdded }) {
   if (!isOpen) return null;
 
   const handlePhotoUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoPreview(reader.result);
-      };
-      reader.readAsDataURL(file);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setErrorMsg('Please select a valid image file (PNG, JPG, or WebP).');
+      e.target.value = '';
+      return;
     }
+    if (file.size > 350 * 1024) {
+      setErrorMsg('Photo file size must be 350 KB or smaller.');
+      e.target.value = '';
+      return;
+    }
+    setErrorMsg('');
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPhotoPreview(reader.result);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async (e) => {
@@ -83,7 +95,7 @@ export default function AddBatchModal({ isOpen, onClose, onBatchAdded }) {
       location,
       locality,
       storage_type: storageType,
-      photo_url: photoPreview || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=400',
+      photo_url: photoPreview || null,
       harvest_time: new Date().toISOString()
     };
 

@@ -118,9 +118,11 @@ export default function NotificationDrawer({
 
                       {!n.is_read && (
                         <button
+                          type="button"
                           onClick={() => onMarkRead(n.id)}
                           className="p-1 text-slate-400 hover:text-emerald-600 rounded hover:bg-white shrink-0"
                           title="Mark read"
+                          aria-label={`Mark notification "${title}" as read`}
                         >
                           <Check className="w-3.5 h-3.5" />
                         </button>

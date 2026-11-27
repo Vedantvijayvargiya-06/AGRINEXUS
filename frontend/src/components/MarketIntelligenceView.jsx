@@ -37,6 +37,7 @@ export default function MarketIntelligenceView() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [filterCrop, setFilterCrop] = useState('');
+  const [sortBy, setSortBy] = useState('price_desc');
   const [selectedForOverride, setSelectedForOverride] = useState(null);
   const [overrideValue, setOverrideValue] = useState('');
   const [overrideMsg, setOverrideMsg] = useState('');
@@ -107,9 +108,30 @@ export default function MarketIntelligenceView() {
     }
   };
 
-  const filtered = prices.filter(
-    (p) => !filterCrop || p.crop.toLowerCase().includes(filterCrop.toLowerCase())
-  );
+  const filtered = prices
+    .filter((p) => {
+      if (!filterCrop) return true;
+      const q = filterCrop.toLowerCase();
+      return (
+        p.crop.toLowerCase().includes(q) ||
+        p.mandi.toLowerCase().includes(q) ||
+        p.state.toLowerCase().includes(q)
+      );
+    })
+    .slice()
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'price_asc':
+          return a.modal_price_per_kg - b.modal_price_per_kg;
+        case 'distance_asc':
+          return a.distance_km - b.distance_km;
+        case 'arrivals_desc':
+          return b.arrivals_tonnes - a.arrivals_tonnes;
+        case 'price_desc':
+        default:
+          return b.modal_price_per_kg - a.modal_price_per_kg;
+      }
+    });
 
   const getTrendBadge = (trend, changePct) => {
     if (trend === 'rising') {
@@ -165,15 +187,26 @@ export default function MarketIntelligenceView() {
             <p className="text-xs text-slate-300 max-w-2xl">{t('market_subtitle')}</p>
           </div>
 
-          <div className="flex items-center space-x-2 w-full md:w-auto">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full md:w-auto">
             <input
               type="text"
-              placeholder="Search crop (e.g. Tomato)..."
+              placeholder="Search crop or mandi..."
               value={filterCrop}
               onChange={(e) => setFilterCrop(e.target.value)}
-              aria-label="Filter mandi prices by crop"
-              className="flex-1 min-w-0 md:w-56 px-3 py-2 sm:py-1.5 bg-white/10 text-white placeholder:text-slate-400 border border-white/20 rounded-xl text-xs focus:outline-none focus:bg-white/20"
+              aria-label="Filter mandi prices by crop or mandi"
+              className="flex-1 min-w-[140px] md:w-48 px-3 py-2 sm:py-1.5 bg-white/10 text-white placeholder:text-slate-400 border border-white/20 rounded-xl text-xs focus:outline-none focus:bg-white/20"
             />
+            <select
+              aria-label="Sort mandi prices"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="px-2.5 py-2 sm:py-1.5 bg-white/10 text-white border border-white/20 rounded-xl text-xs font-semibold focus:outline-none focus:bg-slate-800 shrink-0"
+            >
+              <option value="price_desc" className="text-slate-900">Price: High → Low</option>
+              <option value="price_asc" className="text-slate-900">Price: Low → High</option>
+              <option value="distance_asc" className="text-slate-900">Nearest Distance</option>
+              <option value="arrivals_desc" className="text-slate-900">Highest Arrivals</option>
+            </select>
             <button
               type="button"
               onClick={loadPrices}

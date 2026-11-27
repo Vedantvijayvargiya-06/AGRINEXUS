@@ -56,54 +56,91 @@ router.get('', requireAuth, (req, res) => {
 });
 
 router.post('/optimize-candidates', requireRole('fpo_admin', 'admin'), (req, res) => {
-  const crop = String(req.query.crop || 'Tomato').trim();
-  const locality = String(req.query.locality || 'Kolar').trim();
+  const cropFilter = req.query.crop ? String(req.query.crop).trim() : '';
+  const localityFilter = req.query.locality ? String(req.query.locality).trim() : '';
 
-  const activeBatches = listBatches({ status: 'active' }).filter(
-    (b) => b.crop === crop && b.spoilage_risk < 70.0
-  );
+  const unclusteredActive = listBatches({ status: 'active' }).filter((b) => {
+    if (b.cluster_id) return false;
+    if (b.spoilage_risk >= 70.0) return false;
+    if (cropFilter && cropFilter.toLowerCase() !== 'all' && b.crop.toLowerCase() !== cropFilter.toLowerCase()) {
+      return false;
+    }
+    if (
+      localityFilter &&
+      localityFilter.toLowerCase() !== 'all' &&
+      !String(b.locality || '').toLowerCase().includes(localityFilter.toLowerCase())
+    ) {
+      return false;
+    }
+    return true;
+  });
 
-  if (activeBatches.length === 0) {
+  if (unclusteredActive.length === 0) {
     return res.json({
-      message: 'No active low-risk batches available for candidate clustering',
+      message: 'No unclustered active low-risk batches available for new candidate clustering.',
+      created_count: 0,
       candidates: []
     });
   }
 
-  const batchDicts = activeBatches.map((b) => {
-    const farmer = getUserById(b.farmer_id);
-    return {
-      id: b.id,
-      batch_code: b.batch_code,
-      farmer_id: b.farmer_id,
-      farmer_name: farmer ? farmer.name : 'Farmer',
-      quantity_kg: b.quantity_kg
-    };
-  });
+  // Group unclustered batches by crop so different crops are never mixed in the same dispatch
+  const groups = new Map();
+  for (const b of unclusteredActive) {
+    const key = b.crop;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(b);
+  }
 
-  const optResult = ClusterOptimizer.evaluateClusterFreightSavings(batchDicts, 140.0);
-  const code = `CLUS-${crop.slice(0, 3).toUpperCase()}-${locality.slice(0, 3).toUpperCase()}-${crypto.randomInt(100, 1000)}`;
+  const created = [];
+  for (const [cropName, groupBatches] of groups.entries()) {
+    const batchDicts = groupBatches.map((b) => {
+      const farmer = getUserById(b.farmer_id);
+      return {
+        id: b.id,
+        batch_code: b.batch_code,
+        farmer_id: b.farmer_id,
+        farmer_name: farmer ? farmer.name : 'Farmer',
+        quantity_kg: b.quantity_kg
+      };
+    });
 
-  const newCluster = createClusterWithBatches(
-    {
-      cluster_code: code,
-      crop,
-      locality: `${locality} Cluster Area`,
-      destination_mandi: 'Azadpur Mandi, Delhi',
-      total_quantity_kg: optResult.total_quantity_kg,
-      individual_transport_cost_per_kg: optResult.individual_cost_per_kg,
-      pooled_transport_cost_per_kg: optResult.pooled_cost_per_kg,
-      cost_savings_pct: optResult.savings_pct,
-      vehicle_type: optResult.vehicle_type,
-      capacity_utilization_pct: optResult.capacity_utilization_pct
-    },
-    activeBatches.map((b) => b.id)
-  );
+    const optResult = ClusterOptimizer.evaluateClusterFreightSavings(batchDicts, 140.0);
+    const groupLocality = localityFilter || groupBatches[0]?.locality || 'Kolar';
+    const locPrefix = groupLocality.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'LOC';
+    const code = `CLUS-${cropName.slice(0, 3).toUpperCase()}-${locPrefix}-${crypto.randomInt(100, 1000)}`;
+
+    const newCluster = createClusterWithBatches(
+      {
+        cluster_code: code,
+        crop: cropName,
+        locality: `${groupLocality} Cluster Area`,
+        destination_mandi: 'Azadpur Mandi, Delhi',
+        total_quantity_kg: optResult.total_quantity_kg,
+        individual_transport_cost_per_kg: optResult.individual_cost_per_kg,
+        pooled_transport_cost_per_kg: optResult.pooled_cost_per_kg,
+        cost_savings_pct: optResult.savings_pct,
+        vehicle_type: optResult.vehicle_type,
+        capacity_utilization_pct: optResult.capacity_utilization_pct
+      },
+      groupBatches.map((b) => b.id)
+    );
+
+    created.push({
+      cluster_id: newCluster.id,
+      cluster_code: newCluster.cluster_code,
+      crop: cropName,
+      batches_count: groupBatches.length,
+      optimization: optResult
+    });
+  }
 
   return res.json({
-    cluster_id: newCluster.id,
-    cluster_code: newCluster.cluster_code,
-    optimization: optResult
+    message: `Created ${created.length} candidate cluster(s) from ${unclusteredActive.length} unclustered lot(s).`,
+    created_count: created.length,
+    cluster_id: created[0]?.cluster_id,
+    cluster_code: created[0]?.cluster_code,
+    optimization: created[0]?.optimization,
+    candidates: created
   });
 });
 

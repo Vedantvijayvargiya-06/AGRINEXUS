@@ -8,8 +8,9 @@ import {
   IS_PRODUCTION,
   RATE_LIMIT_API_PER_MINUTE
 } from './server/config.js';
-import { initStore } from './server/store.js';
+import { initStore, insertErrorLog } from './server/store.js';
 import { HttpError, checkRateLimit } from './server/security.js';
+import { classifyAndSanitizeError } from './server/services/diagnosticsService.js';
 import authRouter from './server/routes/auth.js';
 import batchesRouter from './server/routes/batches.js';
 import decisionsRouter from './server/routes/decisions.js';
@@ -93,20 +94,57 @@ export async function createApp({ dbPath = null, serveFrontend = true } = {}) {
 
   // API 404 fallback
   app.use('/api', (req, res) => {
+    try {
+      insertErrorLog(
+        classifyAndSanitizeError({
+          err: { message: `API route not found: ${req.method} ${req.originalUrl}` },
+          req,
+          statusCode: 404,
+          source: 'backend',
+          module: 'api-router'
+        })
+      );
+    } catch {
+      // Never allow telemetry failure to break HTTP response
+    }
     res.status(404).json({ detail: 'API route not found' });
   });
 
   // Global API Error Handler
   app.use((err, req, res, next) => {
+    const recordSafeError = (statusCode, errorObj) => {
+      try {
+        const pathOnly = String(req?.originalUrl || '').split('?')[0];
+        const moduleName = pathOnly.split('/')[2] || 'api';
+        insertErrorLog(
+          classifyAndSanitizeError({
+            err: errorObj,
+            req,
+            statusCode,
+            source: 'backend',
+            module: moduleName
+          })
+        );
+      } catch {
+        // Ignore error-logging failure
+      }
+    };
+
     if (err instanceof HttpError) {
+      if (err.status >= 500 || err.status === 403 || err.status === 404) {
+        recordSafeError(err.status, err);
+      }
       return res.status(err.status).json({ detail: err.detail });
     }
     if (err && (err.type === 'entity.parse.failed' || err instanceof SyntaxError)) {
+      recordSafeError(400, err);
       return res.status(400).json({ detail: 'Invalid JSON request body' });
     }
     if (err && typeof err.message === 'string' && err.message.includes('UNIQUE constraint failed')) {
+      recordSafeError(400, err);
       return res.status(400).json({ detail: 'Duplicate record violates uniqueness constraint' });
     }
+    recordSafeError(500, err);
     console.error('[AgriNexus Server Error]', err);
     return res.status(500).json({
       detail: IS_PRODUCTION ? 'Internal server error' : err?.message || 'Internal server error'

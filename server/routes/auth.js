@@ -65,7 +65,7 @@ function normalizeEmail(email) {
 }
 
 function validatePasswordInput(password) {
-  if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
+  if (typeof password !== 'string' || password.length < 8 || password.length > 128 || !password.trim()) {
     throw new HttpError(400, 'Password must be between 8 and 128 characters long');
   }
   return password;
@@ -299,6 +299,9 @@ router.post('/set-password', requireAuth, (req, res, next) => {
 
 router.post('/setup-password-with-otp', (req, res, next) => {
   try {
+    const clientIp = req.ip || 'unknown';
+    checkRateLimit(`otp_setup_pw:${clientIp}`, RATE_LIMIT_AUTH_PER_MINUTE, 60);
+
     const cleanPhone = normalizePhone(req.body?.phone);
     if (!cleanPhone) throw new HttpError(400, 'Phone number is required');
     const otp = String(req.body?.otp || '').trim();
@@ -307,8 +310,31 @@ router.post('/setup-password-with-otp', (req, res, next) => {
 
     const user = getUserByPhone(cleanPhone);
     if (!user) throw new HttpError(404, 'User not found');
+    if (!user.is_approved) {
+      throw new HttpError(403, 'Account is pending administrator approval');
+    }
 
-    verifyOtp(cleanPhone, otp);
+    const now = new Date();
+    if (user.locked_until && user.locked_until > now) {
+      const remainingMins = Math.max(1, Math.floor((user.locked_until - now) / 60000));
+      throw new HttpError(
+        403,
+        `Account locked due to failed attempts. Try again in ${remainingMins} minutes.`
+      );
+    }
+
+    try {
+      verifyOtp(cleanPhone, otp);
+    } catch (err) {
+      const nextFailed = (user.failed_attempts || 0) + 1;
+      if (nextFailed >= 5) {
+        updateUserAuthState(user.id, 0, new Date(now.getTime() + 15 * 60000));
+      } else {
+        updateUserAuthState(user.id, nextFailed, null);
+      }
+      throw err;
+    }
+
     updateUserPassword(user.id, hashPassword(validPassword));
 
     const accessToken = createAccessToken(user.id, user.role);
@@ -337,6 +363,9 @@ router.post('/demo-switch', (req, res, next) => {
     }
     const user = getUserById(targetId);
     if (!user) throw new HttpError(404, 'User not found');
+    if (!user.is_approved) {
+      throw new HttpError(403, 'Account is pending administrator approval');
+    }
 
     // Never allow unauthenticated switching into privileged administrator accounts
     if (user.role === 'admin' || user.role === 'fpo_admin') {

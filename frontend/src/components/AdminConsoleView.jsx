@@ -9,10 +9,21 @@ import {
   Save,
   Cpu,
   AlertCircle,
-  UserPlus
+  UserPlus,
+  Activity
 } from 'lucide-react';
 
-export default function AdminConsoleView() {
+function formatUptime(seconds) {
+  const s = Math.max(0, Number(seconds) || 0);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const rem = s % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${rem}s`;
+  return `${rem}s`;
+}
+
+export default function AdminConsoleView({ onOpenDiagnostics }) {
   const { t } = useLanguage();
   const { currentUser } = useAuth();
   const isSystemAdmin = currentUser?.role === 'admin';
@@ -163,16 +174,28 @@ export default function AdminConsoleView() {
     <div className="space-y-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-4 sm:p-6 rounded-2xl shadow-md">
-        <div className="space-y-1">
-          <div className="flex items-center space-x-2">
-            <span className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg shrink-0">
-              <Settings className="w-5 h-5" />
-            </span>
-            <h2 className="text-lg sm:text-xl font-black tracking-tight">{t('nav_admin')}</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center space-x-2">
+              <span className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg shrink-0">
+                <Settings className="w-5 h-5" />
+              </span>
+              <h2 className="text-lg sm:text-xl font-black tracking-tight">{t('nav_admin')}</h2>
+            </div>
+            <p className="text-xs text-slate-300">
+              System health telemetry, crop degradation heuristics configuration, and user governance
+            </p>
           </div>
-          <p className="text-xs text-slate-300">
-            System health telemetry, crop degradation heuristics configuration, and user governance
-          </p>
+          {isSystemAdmin && onOpenDiagnostics && (
+            <button
+              type="button"
+              onClick={onOpenDiagnostics}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-sm shrink-0 self-start sm:self-auto"
+            >
+              <Activity className="w-4 h-4 shrink-0" />
+              <span>Open System Diagnostics</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -217,23 +240,25 @@ export default function AdminConsoleView() {
             <div className="grid grid-cols-1 min-[360px]:grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm min-w-0">
                 <span className="text-slate-500 text-[10px] uppercase font-bold block truncate">
-                  API Server Uptime
+                  Server Uptime
                 </span>
-                <p className="text-xl sm:text-2xl font-black text-emerald-600 mt-1 break-words">
-                  {health.api_uptime_pct}%
+                <p className="text-xl sm:text-2xl font-black text-emerald-600 mt-1 break-words tabular-nums">
+                  {formatUptime(health.uptime_seconds)}
                 </p>
                 <span className="text-[10px] text-slate-400">{health.database || 'SQLite'}</span>
               </div>
 
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm min-w-0">
                 <span className="text-slate-500 text-[10px] uppercase font-bold block truncate">
-                  Latency
+                  DB Query Latency
                 </span>
-                <p className="text-xl sm:text-2xl font-black text-slate-900 mt-1 break-words">
-                  {health.sync_latency_ms}{' '}
+                <p className="text-xl sm:text-2xl font-black text-slate-900 mt-1 break-words tabular-nums">
+                  {health.db_latency_ms ?? 0}{' '}
                   <span className="text-xs text-slate-400 font-normal">ms</span>
                 </p>
-                <span className="text-[10px] text-emerald-600 font-semibold">&lt; 500ms SLA</span>
+                <span className="text-[10px] text-emerald-600 font-semibold">
+                  Integrity: {health.database_integrity || 'ok'}
+                </span>
               </div>
 
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm min-w-0">

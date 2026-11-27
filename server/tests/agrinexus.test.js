@@ -11,9 +11,10 @@ process.env.JWT_SECRET_KEY =
 const { DecayEngine } = await import('../services/decayEngine.js');
 const { DecisionEngine } = await import('../services/decisionEngine.js');
 const { ClusterOptimizer } = await import('../services/clusterOptimizer.js');
+const { ReportingService } = await import('../services/reportingService.js');
 const { AgriNexusAssist } = await import('../services/agrinexusAssist.js');
-const { closeStore } = await import('../store.js');
-const { resetRateLimits } = await import('../security.js');
+const { closeStore, getUserByEmail, updateUserApproval, updateUserAuthState, deleteOtpRecord } = await import('../store.js');
+const { resetRateLimits, generateOtp } = await import('../security.js');
 const { createApp } = await import('../../server.js');
 
 function tempDbPath(prefix) {
@@ -306,3 +307,355 @@ test('SQLite Persistence: registered farmer, created batch, and claimed admin su
     }
   }
 });
+
+test('ReportingService: empty clusters return 0% savings and zero cost/kg without hardcoded fallbacks', () => {
+  const emptySummary = ReportingService.calculateFpoSummary([], []);
+  assert.equal(emptySummary.avg_freight_savings_pct, 0);
+  assert.equal(emptySummary.avg_solo_cost_per_kg, 0);
+  assert.equal(emptySummary.avg_pooled_cost_per_kg, 0);
+  assert.equal(emptySummary.total_freight_savings_inr, 0);
+
+  const populatedSummary = ReportingService.calculateFpoSummary(
+    [{ quantity_kg: 3000, best_expected_value: 90000, crop: 'Tomato', recommended_action: 'redirect' }],
+    [{ individual_cost_total: 15000, pooled_cost_total: 6000, total_quantity_kg: 3000 }]
+  );
+  assert.equal(populatedSummary.avg_freight_savings_pct, 60);
+  assert.equal(populatedSummary.avg_solo_cost_per_kg, 5);
+  assert.equal(populatedSummary.avg_pooled_cost_per_kg, 2);
+});
+
+test('Cluster optimize-candidates preserves existing cluster_id and market override recalculates recommendations', async () => {
+  const dbPath = tempDbPath('agrinexus-fixes');
+  const { server, baseUrl } = await startServer(dbPath);
+  try {
+    // Claim admin to obtain admin JWT
+    const claimRes = await fetch(`${baseUrl}/api/auth/admin-setup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'AdminStrongPassword1!' })
+    });
+    assert.equal(claimRes.status, 200);
+    const { access_token: adminToken } = await claimRes.json();
+
+    // Register a farmer and add two unclustered Onion batches
+    const signupRes = await fetch(`${baseUrl}/api/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Cluster Fix Farmer',
+        phone: '9777766666',
+        email: 'cluster.farmer@example.com',
+        password: 'FarmerPassword123',
+        role: 'farmer'
+      })
+    });
+    assert.equal(signupRes.status, 201);
+    const { access_token: farmerToken } = await signupRes.json();
+
+    // Check existing seeded Tomato batches keep their original cluster_id after optimize-candidates
+    const beforeBatchesRes = await fetch(`${baseUrl}/api/batches`, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    const beforeBatches = await beforeBatchesRes.json();
+    const seededClusteredBatch = beforeBatches.find((b) => b.cluster_id !== null);
+    assert.ok(seededClusteredBatch, 'Seed DB should include an already-clustered Tomato batch');
+    const originalClusterId = seededClusteredBatch.cluster_id;
+
+    // Create two unclustered Onion batches
+    for (const qty of [1100, 1400]) {
+      const addRes = await fetch(`${baseUrl}/api/batches`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${farmerToken}`
+        },
+        body: JSON.stringify({
+          crop: 'Onion',
+          quantity_kg: qty,
+          ambient_temp_c: 26,
+          locality: 'Kolar'
+        })
+      });
+      assert.equal(addRes.status, 201);
+    }
+
+    // Run optimize-candidates for all crops
+    const optRes = await fetch(`${baseUrl}/api/clusters/optimize-candidates`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    assert.equal(optRes.status, 200);
+    const optJson = await optRes.json();
+    assert.ok(
+      Array.isArray(optJson.candidates) && optJson.candidates.some((c) => c.crop === 'Onion'),
+      'Should propose Onion cluster for unclustered batches'
+    );
+
+    // Verify seeded already-clustered batch did NOT have its cluster_id overwritten
+    const afterBatchesRes = await fetch(`${baseUrl}/api/batches`, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    const afterBatches = await afterBatchesRes.json();
+    const sameBatchAfter = afterBatches.find((b) => b.id === seededClusteredBatch.id);
+    assert.equal(sameBatchAfter.cluster_id, originalClusterId);
+
+    // Override Tomato market price and verify active Tomato batch recommendations recalculate in SQLite
+    const marketRes = await fetch(`${baseUrl}/api/market/prices?crop=Tomato`, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    const prices = await marketRes.json();
+    assert.ok(prices.length > 0);
+    const targetPrice = prices[0];
+
+    const seededRecBefore = await (
+      await fetch(`${baseUrl}/api/decisions/batch/${seededClusteredBatch.id}`, {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      })
+    ).json();
+
+    const overrideRes = await fetch(`${baseUrl}/api/market/override-price`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ market_price_id: targetPrice.id, new_modal_price: 95 })
+    });
+    assert.equal(overrideRes.status, 200);
+    const overrideJson = await overrideRes.json();
+    assert.ok(overrideJson.recalculated_batches >= 1);
+
+    const seededRecAfter = await (
+      await fetch(`${baseUrl}/api/decisions/batch/${seededClusteredBatch.id}`, {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      })
+    ).json();
+    assert.notEqual(
+      seededRecAfter.best_expected_value,
+      seededRecBefore.best_expected_value,
+      'Market price override must persist recalculated batch recommendation'
+    );
+  } finally {
+    await stopServer(server);
+    cleanupDbFiles(dbPath);
+  }
+});
+
+test('Auth OTP setup enforces approval, lockout, and whitespace password checks', async () => {
+  const dbPath = tempDbPath('agrinexus-auth-hardening');
+  const { server, baseUrl } = await startServer(dbPath);
+  try {
+    const signupRes = await fetch(`${baseUrl}/api/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Lockout Farmer',
+        phone: '9666655555',
+        email: 'lockout@example.com',
+        password: 'InitialPassword123',
+        role: 'farmer'
+      })
+    });
+    assert.equal(signupRes.status, 201);
+
+    // Whitespace-only password rejected on login/signup
+    const blankSignup = await fetch(`${baseUrl}/api/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Blank Pass',
+        phone: '9666655551',
+        email: 'blank@example.com',
+        password: '        ',
+        role: 'farmer'
+      })
+    });
+    assert.equal(blankSignup.status, 400);
+
+    // Request OTP endpoint succeeds cleanly without leaking OTP when DEMO_MODE=false
+    const otpReq = await fetch(`${baseUrl}/api/auth/request-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: '9666655555' })
+    });
+    assert.equal(otpReq.status, 200);
+    const otpJson = await otpReq.json();
+    assert.equal(otpJson.demo_note, null);
+
+    // Clear cooldown so test can generate a deterministic OTP directly
+    deleteOtpRecord('9666655555');
+    const { otpCode } = generateOtp('9666655555');
+
+    const user = getUserByEmail('lockout@example.com');
+    updateUserApproval(user.id, false);
+
+    const setupBlocked = await fetch(`${baseUrl}/api/auth/setup-password-with-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone: '9666655555',
+        otp: otpCode,
+        new_password: 'NewPassword123!'
+      })
+    });
+    assert.equal(setupBlocked.status, 403);
+
+    // Re-approve, lock user via failed attempts, confirm OTP reset fails 403
+    updateUserApproval(user.id, true);
+    updateUserAuthState(user.id, 0, new Date(Date.now() + 15 * 60000));
+    const lockedSetup = await fetch(`${baseUrl}/api/auth/setup-password-with-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone: '9666655555',
+        otp: otpCode,
+        new_password: 'NewPassword123!'
+      })
+    });
+    assert.equal(lockedSetup.status, 403);
+
+    // Unlock user and confirm valid OTP resets password cleanly
+    updateUserAuthState(user.id, 0, null);
+    const validSetup = await fetch(`${baseUrl}/api/auth/setup-password-with-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone: '9666655555',
+        otp: otpCode,
+        new_password: 'NewPassword123!'
+      })
+    });
+    assert.equal(validSetup.status, 200);
+    const validSetupJson = await validSetup.json();
+    assert.ok(validSetupJson.access_token);
+  } finally {
+    await stopServer(server);
+    cleanupDbFiles(dbPath);
+  }
+});
+
+test('System Health & Diagnostics module enforces admin-only RBAC, runs safe checks, and sanitizes/resolves error logs', async () => {
+  const dbPath = tempDbPath('agrinexus-diagnostics');
+  const { server, baseUrl } = await startServer(dbPath);
+  try {
+    // Setup admin + farmer
+    const claimRes = await fetch(`${baseUrl}/api/auth/admin-setup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'AdminStrongPassword1!' })
+    });
+    const { access_token: adminToken } = await claimRes.json();
+
+    const signupRes = await fetch(`${baseUrl}/api/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Diag Farmer',
+        phone: '9555544444',
+        email: 'diag.farmer@example.com',
+        password: 'FarmerPassword123',
+        role: 'farmer'
+      })
+    });
+    const { access_token: farmerToken } = await signupRes.json();
+
+    // 1. Farmer strictly blocked from diagnostics overview, run, and resolve endpoints
+    const farmerOverviewRes = await fetch(`${baseUrl}/api/admin/diagnostics/overview`, {
+      headers: { Authorization: `Bearer ${farmerToken}` }
+    });
+    assert.equal(farmerOverviewRes.status, 403);
+
+    const farmerRunRes = await fetch(`${baseUrl}/api/admin/diagnostics/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${farmerToken}`
+      },
+      body: JSON.stringify({ scope: 'full' })
+    });
+    assert.equal(farmerRunRes.status, 403);
+
+    // 2. Real system-health reports numeric uptime_seconds & db_latency_ms
+    const healthRes = await fetch(`${baseUrl}/api/admin/system-health`, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    assert.equal(healthRes.status, 200);
+    const healthJson = await healthRes.json();
+    assert.equal(healthJson.database_integrity, 'ok');
+    assert.equal(typeof healthJson.uptime_seconds, 'number');
+    assert.equal(typeof healthJson.db_latency_ms, 'number');
+
+    // 3. Trigger real 404 + sanitized frontend error log (with sensitive Bearer string inside message)
+    const missingRes = await fetch(`${baseUrl}/api/non-existent-diag-probe`, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    assert.equal(missingRes.status, 404);
+
+    const clientErrRes = await fetch(`${baseUrl}/api/admin/diagnostics/client-error`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${farmerToken}`
+      },
+      body: JSON.stringify({
+        message: 'Render failed with Bearer supersecrettoken123 and password=mysecretpass',
+        module: 'WhatIfSimulator',
+        endpoint: '/simulator',
+        status_code: 500
+      })
+    });
+    assert.equal(clientErrRes.status, 201);
+    const clientErrJson = await clientErrRes.json();
+    assert.ok(clientErrJson.id);
+
+    // 4. Admin executes full diagnostic suite
+    const runRes = await fetch(`${baseUrl}/api/admin/diagnostics/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ scope: 'full' })
+    });
+    assert.equal(runRes.status, 200);
+    const runJson = await runRes.json();
+    assert.ok(runJson.run_id.startsWith('DIAG-'));
+    assert.equal(runJson.failed_checks, 0);
+    assert.ok(runJson.passed_checks >= 7);
+
+    // 5. Admin inspects overview: verifies secret redaction & resolves error log
+    const overviewRes = await fetch(`${baseUrl}/api/admin/diagnostics/overview`, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    assert.equal(overviewRes.status, 200);
+    const overview = await overviewRes.json();
+    assert.equal(overview.database.integrity, 'ok');
+    assert.ok(Array.isArray(overview.integrations) && overview.integrations.length >= 4);
+    assert.ok(overview.diagnostic_runs.some((r) => r.run_id === runJson.run_id));
+
+    const capturedClientErr = overview.error_logs.find((e) => e.id === clientErrJson.id);
+    assert.ok(capturedClientErr, 'Client error should appear in diagnostics overview');
+    assert.ok(!capturedClientErr.message.includes('supersecrettoken123'));
+    assert.ok(!capturedClientErr.message.includes('mysecretpass'));
+    assert.ok(capturedClientErr.message.includes('[REDACTED]'));
+    assert.ok(capturedClientErr.root_cause && capturedClientErr.recommended_fix);
+
+    const resolveRes = await fetch(`${baseUrl}/api/admin/diagnostics/errors/${clientErrJson.id}/resolve`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    assert.equal(resolveRes.status, 200);
+
+    const clearRes = await fetch(`${baseUrl}/api/admin/diagnostics/errors/resolved`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    assert.equal(clearRes.status, 200);
+    const clearJson = await clearRes.json();
+    assert.ok(clearJson.removed_count >= 1);
+  } finally {
+    await stopServer(server);
+    cleanupDbFiles(dbPath);
+  }
+});
+

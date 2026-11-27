@@ -35,6 +35,7 @@ router.get('/summary', requireRole('fpo_admin', 'admin'), (req, res) => {
   const clusterDicts = clusters.map((c) => ({
     id: c.id,
     cluster_code: c.cluster_code,
+    total_quantity_kg: c.total_quantity_kg,
     individual_cost_total: c.individual_transport_cost_per_kg * c.total_quantity_kg,
     pooled_cost_total: c.pooled_transport_cost_per_kg * c.total_quantity_kg
   }));

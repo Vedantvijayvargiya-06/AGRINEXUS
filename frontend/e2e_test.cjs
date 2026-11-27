@@ -1,5 +1,7 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 async function launchChromium() {
   const candidates = [
@@ -15,6 +17,15 @@ async function launchChromium() {
     }
   }
   return chromium.launch({ headless: true });
+}
+
+function cleanupDbFiles(dbPath) {
+  for (const suffix of ['', '-wal', '-shm']) {
+    const file = `${dbPath}${suffix}`;
+    if (fs.existsSync(file)) {
+      fs.unlinkSync(file);
+    }
+  }
 }
 
 async function runE2ETests() {
@@ -44,7 +55,6 @@ async function runE2ETests() {
     page.on('console', (msg) => {
       if (msg.type() === 'error') {
         const text = msg.text();
-        // Ignore harmless favicon / disabled HMR websocket messages
         if (!text.includes('favicon') && !text.includes('WebSocket')) {
           consoleErrors.push(text);
         }
@@ -87,7 +97,7 @@ async function runE2ETests() {
     await page.getByRole('button', { name: 'Create Account' }).click();
 
     await page.waitForSelector('text=Active Batches', { timeout: 10000 });
-    check('5. Public farmer signup enters Farmer Dashboard', true);
+    check('5. Public farmer signup enters Farmer Dashboard (and Diagnostics tab is hidden)', (await page.locator('button:has-text("Diagnostics")').count()) === 0);
 
     const tokenInStorage = await page.evaluate(() => localStorage.getItem('agrinexus_token'));
     check('6. JWT is kept in memory only (not stored in localStorage)', tokenInStorage === null);
@@ -112,16 +122,20 @@ async function runE2ETests() {
     check('9. Decision Breakdown modal renders 4 pathways', true);
     await page.getByRole('button', { name: 'Close decision breakdown' }).click();
 
-    // Navigate to What-If Simulator
+    // Navigate to What-If Simulator & verify editable local/terminal price controls work
     await page.getByRole('button', { name: /What-If Simulator/i }).first().click();
+    await page.waitForSelector('#sim-local-price', { timeout: 10000 });
+    await page.fill('#sim-local-price', '18');
+    await page.fill('#sim-alt-price', '55');
     await page.waitForSelector('text=Comparative Net Realization', { timeout: 10000 });
-    check('10. What-If Simulator renders live comparative calculation', true);
+    check('10. What-If Simulator renders editable prices and live comparative calculation', true);
 
-    // Navigate to Market Intelligence & verify farmer cannot see Override button
+    // Navigate to Market Intelligence, verify sort/filter & farmer cannot see Override button
     await page.getByRole('button', { name: /Mandi Market/i }).first().click();
     await page.waitForSelector('table:has-text("Azadpur")', { timeout: 10000 });
+    await page.selectOption('select[aria-label="Sort mandi prices"]', 'distance_asc');
     const marketOverrideCount = await page.locator('button:has-text("Override")').count();
-    check('11. Market Intelligence hides Override action from Farmer role', marketOverrideCount === 0);
+    check('11. Market Intelligence supports sort & hides Override action from Farmer role', marketOverrideCount === 0);
 
     // Navigate to Cluster Pooling & verify farmer cannot see Confirm Cluster action
     await page.getByRole('button', { name: /Cluster Pooling/i }).first().click();
@@ -151,7 +165,7 @@ async function runE2ETests() {
 
     for (const vp of viewports) {
       await page.setViewportSize(vp);
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(150);
       const metrics = await page.evaluate(() => ({
         scrollWidth: document.documentElement.scrollWidth,
         innerWidth: window.innerWidth
@@ -163,7 +177,115 @@ async function runE2ETests() {
       );
     }
 
-    check('15. Zero uncaught page or console errors', pageErrors.length === 0 && consoleErrors.length === 0, `${pageErrors.concat(consoleErrors).join('; ')}`);
+    // Phase B: Isolated System Admin & Diagnostics UI Verification
+    if (process.env.E2E_SKIP_ISOLATED_ADMIN !== '1') {
+      const tempDb = path.join(os.tmpdir(), `agrinexus-e2e-admin-${Date.now()}.db`);
+      process.env.JWT_SECRET_KEY =
+        process.env.JWT_SECRET_KEY || 'e2e-only-super-secret-key-at-least-32-chars';
+      const express = (await import('express')).default;
+      const { createApp } = await import('../server.js');
+      const { closeStore } = await import('../server/store.js');
+      const { resetRateLimits } = await import('../server/security.js');
+      resetRateLimits();
+      const adminApp = await createApp({ dbPath: tempDb, serveFrontend: false });
+      const distDir = path.resolve(__dirname, 'dist');
+      adminApp.use(express.static(distDir));
+      adminApp.get('*', (req, res) => {
+        res.sendFile(path.join(distDir, 'index.html'));
+      });
+      const adminServer = await new Promise((resolve) => {
+        const s = adminApp.listen(0, '127.0.0.1', () => resolve(s));
+      });
+      const adminBaseUrl = `http://127.0.0.1:${adminServer.address().port}`;
+
+      try {
+        const adminPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+        adminPage.on('pageerror', (err) => pageErrors.push(err.message));
+
+        // Claim admin password cleanly & trigger a sanitized 404 probe for error feed check
+        const claimRes = await fetch(`${adminBaseUrl}/api/auth/admin-setup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: 'AdminE2EStrongPassword1!' })
+        });
+        check('15. Isolated admin setup succeeded', claimRes.status === 200);
+        await fetch(`${adminBaseUrl}/api/e2e-missing-probe`);
+
+        await adminPage.goto(adminBaseUrl, { waitUntil: 'networkidle', timeout: 20000 });
+        await adminPage.waitForSelector('#login-email', { timeout: 10000 });
+        await adminPage.fill('#login-email', 'superadmin@agrinexus.gov.in');
+        await adminPage.fill('#login-password', 'AdminE2EStrongPassword1!');
+        await adminPage.getByRole('button', { name: 'Sign In to AgriNexus' }).click();
+
+        await adminPage.waitForSelector('button:has-text("Diagnostics")', { timeout: 10000 });
+
+        // Verify zero navbar button bounding-box overlap at 1280px & 1440px for 7-tab Admin role
+        for (const navVp of [{ width: 1280, height: 800 }, { width: 1440, height: 900 }]) {
+          await adminPage.setViewportSize(navVp);
+          await adminPage.waitForTimeout(100);
+          const navOverlap = await adminPage.evaluate(() => {
+            const header = document.querySelector('header');
+            const buttons = Array.from(header.querySelectorAll('button')).filter((el) => {
+              const style = window.getComputedStyle(el);
+              const rect = el.getBoundingClientRect();
+              return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+            });
+            for (let i = 0; i < buttons.length; i++) {
+              const a = buttons[i].getBoundingClientRect();
+              for (let j = i + 1; j < buttons.length; j++) {
+                const b = buttons[j].getBoundingClientRect();
+                const overlapX = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+                const overlapY = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+                if (overlapX > 1 && overlapY > 1) {
+                  return `"${buttons[i].innerText.trim()}" overlaps "${buttons[j].innerText.trim()}"`;
+                }
+              }
+            }
+            return null;
+          });
+          check(`15b. Admin navbar buttons zero overlap at ${navVp.width}px`, !navOverlap, navOverlap || '');
+        }
+
+        await adminPage.getByRole('button', { name: /Diagnostics/i }).first().click();
+        await adminPage.waitForSelector('text=System Health & Live Diagnostics', { timeout: 10000 });
+        check('16. Admin System Health & Diagnostics screen renders real metrics & integration matrix', true);
+
+        // Execute diagnostic suite from UI
+        await adminPage.getByRole('button', { name: /Run Full Diagnostics/i }).click();
+        await adminPage.waitForSelector('text=Completed full suite', { timeout: 10000 });
+        check('17. Admin diagnostic suite runner executes and renders check results', true);
+
+        // Inspect clickable error log modal & mark resolved
+        await adminPage.waitForSelector('text=e2e-missing-probe', { timeout: 10000 });
+        await adminPage.locator('button:has-text("e2e-missing-probe")').first().click();
+        await adminPage.waitForSelector('text=Likely Root Cause', { timeout: 5000 });
+        await adminPage.getByRole('button', { name: /Mark Resolved/i }).click();
+        await adminPage.waitForSelector('text=No unresolved runtime errors recorded', { timeout: 10000 });
+        check('18. Error detail modal inspection and resolution workflow succeeded', true);
+
+        // Verify zero horizontal overflow on Diagnostics view at mobile & desktop
+        for (const vp of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+          await adminPage.setViewportSize(vp);
+          await adminPage.waitForTimeout(150);
+          const metrics = await adminPage.evaluate(() => ({
+            scrollWidth: document.documentElement.scrollWidth,
+            innerWidth: window.innerWidth
+          }));
+          check(
+            `19. Diagnostics view zero overflow at ${vp.width}x${vp.height}`,
+            metrics.scrollWidth <= metrics.innerWidth,
+            `scrollWidth=${metrics.scrollWidth} > innerWidth=${metrics.innerWidth}`
+          );
+        }
+        await adminPage.close();
+      } finally {
+        await new Promise((resolve) => adminServer.close(resolve));
+        closeStore();
+        cleanupDbFiles(tempDb);
+      }
+    }
+
+    check('20. Zero uncaught page or console errors', pageErrors.length === 0 && consoleErrors.length === 0, `${pageErrors.concat(consoleErrors).join('; ')}`);
 
     await browser.close();
     console.log(`--- E2E Finished: ${failures} failure(s) ---`);
@@ -176,3 +298,4 @@ async function runE2ETests() {
 }
 
 runE2ETests();
+

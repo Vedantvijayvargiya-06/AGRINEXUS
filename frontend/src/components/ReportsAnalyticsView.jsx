@@ -181,33 +181,56 @@ export default function ReportsAnalyticsView() {
                 <span>Cluster Logistics Before vs After (FR-10.3)</span>
               </h3>
 
-              <div className="space-y-3 text-xs">
-                <div>
-                  <div className="flex flex-wrap justify-between gap-1 font-semibold text-slate-600 mb-1">
-                    <span>Individual Dispatches (Baseline):</span>
-                    <span className="font-bold text-red-600">₹4.50 - ₹5.20 / kg</span>
+              {summary.active_clusters_count > 0 && summary.avg_solo_cost_per_kg > 0 ? (
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <div className="flex flex-wrap justify-between gap-1 font-semibold text-slate-600 mb-1">
+                      <span>Individual Dispatches (Weighted Avg):</span>
+                      <span className="font-bold text-red-600 tabular-nums">
+                        ₹{summary.avg_solo_cost_per_kg.toFixed(2)} / kg
+                      </span>
+                    </div>
+                    <div className="w-full bg-red-100 h-3 rounded-full overflow-hidden">
+                      <div className="bg-red-500 h-full w-full" />
+                    </div>
                   </div>
-                  <div className="w-full bg-red-100 h-3 rounded-full overflow-hidden">
-                    <div className="bg-red-500 h-full w-[85%]" />
-                  </div>
-                </div>
 
-                <div>
-                  <div className="flex flex-wrap justify-between gap-1 font-semibold text-slate-800 mb-1">
-                    <span>AgriNexus Pooled Clusters:</span>
-                    <span className="font-bold text-emerald-700">
-                      ₹1.80 - ₹1.85 / kg ({summary.avg_freight_savings_pct}% Drop)
-                    </span>
-                  </div>
-                  <div className="w-full bg-emerald-100 h-3 rounded-full overflow-hidden">
-                    <div className="bg-emerald-600 h-full w-[35%]" />
+                  <div>
+                    <div className="flex flex-wrap justify-between gap-1 font-semibold text-slate-800 mb-1">
+                      <span>AgriNexus Pooled Clusters:</span>
+                      <span className="font-bold text-emerald-700 tabular-nums">
+                        ₹{summary.avg_pooled_cost_per_kg.toFixed(2)} / kg ({summary.avg_freight_savings_pct}% Drop)
+                      </span>
+                    </div>
+                    <div className="w-full bg-emerald-100 h-3 rounded-full overflow-hidden">
+                      <div
+                        className="bg-emerald-600 h-full transition-all duration-300"
+                        style={{
+                          width: `${Math.max(
+                            8,
+                            Math.min(
+                              100,
+                              Math.round(
+                                (summary.avg_pooled_cost_per_kg /
+                                  Math.max(0.01, summary.avg_solo_cost_per_kg)) *
+                                  100
+                              )
+                            )
+                          )}%`
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-500">
+                  No active pooled freight clusters calculated yet. Optimize candidate clusters to view solo vs pooled freight savings.
+                </div>
+              )}
 
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600">
                 Total aggregate freight saved by farmers this harvest cycle:{' '}
-                <strong className="text-emerald-700 font-bold">
+                <strong className="text-emerald-700 font-bold tabular-nums">
                   ₹{summary.total_freight_savings_inr?.toLocaleString('en-IN')}
                 </strong>
                 .

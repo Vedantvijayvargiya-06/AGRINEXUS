@@ -1,22 +1,33 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { useAuth } from './context/AuthContext';
 import { useLanguage } from './context/LanguageContext';
 import { apiFetch } from './utils/api';
+import ErrorBoundary from './components/ErrorBoundary';
 import Header from './components/Header';
 import FarmerDashboard from './components/FarmerDashboard';
-import WhatIfSimulator from './components/WhatIfSimulator';
-import ClusterPoolingView from './components/ClusterPoolingView';
-import MarketIntelligenceView from './components/MarketIntelligenceView';
-import ReportsAnalyticsView from './components/ReportsAnalyticsView';
-import AdminConsoleView from './components/AdminConsoleView';
-import NotificationDrawer from './components/NotificationDrawer';
-import AddBatchModal from './components/AddBatchModal';
-import DigitalTwinModal from './components/DigitalTwinModal';
-import DecisionBreakdownModal from './components/DecisionBreakdownModal';
-import AgriNexusAssistModal from './components/AgriNexusAssistModal';
-import LoginModal from './components/LoginModal';
 import LoginPage from './components/LoginPage';
-import { Sparkles, MessageCircle } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
+
+const WhatIfSimulator = lazy(() => import('./components/WhatIfSimulator'));
+const ClusterPoolingView = lazy(() => import('./components/ClusterPoolingView'));
+const MarketIntelligenceView = lazy(() => import('./components/MarketIntelligenceView'));
+const ReportsAnalyticsView = lazy(() => import('./components/ReportsAnalyticsView'));
+const AdminConsoleView = lazy(() => import('./components/AdminConsoleView'));
+const SystemDiagnosticsView = lazy(() => import('./components/SystemDiagnosticsView'));
+const NotificationDrawer = lazy(() => import('./components/NotificationDrawer'));
+const AddBatchModal = lazy(() => import('./components/AddBatchModal'));
+const DigitalTwinModal = lazy(() => import('./components/DigitalTwinModal'));
+const DecisionBreakdownModal = lazy(() => import('./components/DecisionBreakdownModal'));
+const AgriNexusAssistModal = lazy(() => import('./components/AgriNexusAssistModal'));
+const LoginModal = lazy(() => import('./components/LoginModal'));
+
+function ViewFallback() {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-400 text-xs">
+      Loading module...
+    </div>
+  );
+}
 
 export default function App() {
   const { currentUser, token, authInitialized, isLoginModalOpen, setIsLoginModalOpen } = useAuth();
@@ -120,125 +131,149 @@ export default function App() {
   }
 
   if (!currentUser || !token) {
-    return <LoginPage />;
+    return (
+      <ErrorBoundary>
+        <LoginPage />
+      </ErrorBoundary>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col selection:bg-emerald-500 selection:text-white">
-      
-      {/* Top Navigation */}
-      <Header
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        unreadNotifsCount={unreadCount}
-        onOpenNotifs={() => setIsNotifsOpen(true)}
-        onOpenAssist={() => setIsAssistOpen(true)}
-      />
-
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full min-w-0 mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+    <ErrorBoundary>
+      <div className="min-h-screen bg-slate-50 flex flex-col selection:bg-emerald-500 selection:text-white">
         
-        {activeTab === 'dashboard' && (
-          <FarmerDashboard
-            batches={batches}
-            loading={loading}
-            loadError={loadError}
-            onRetry={() => fetchBatches()}
-            onOpenAddBatch={() => setIsAddBatchOpen(true)}
-            onOpenTwin={(id) => setSelectedTwinBatchId(id)}
-            onOpenDecision={(id) => setSelectedDecisionBatchId(id)}
-            onOpenSimulator={handleOpenSimulatorFromBatch}
-            onOpenAssist={() => setIsAssistOpen(true)}
-          />
-        )}
+        {/* Top Navigation */}
+        <Header
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          unreadNotifsCount={unreadCount}
+          onOpenNotifs={() => setIsNotifsOpen(true)}
+          onOpenAssist={() => setIsAssistOpen(true)}
+        />
 
-        {activeTab === 'simulator' && (
-          <WhatIfSimulator initialBatch={simulatorInitialBatch} />
-        )}
+        {/* Main Content Area */}
+        <main className="flex-1 max-w-7xl w-full min-w-0 mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+          <Suspense fallback={<ViewFallback />}>
+            {activeTab === 'dashboard' && (
+              <FarmerDashboard
+                batches={batches}
+                loading={loading}
+                loadError={loadError}
+                onRetry={() => fetchBatches()}
+                onOpenAddBatch={() => setIsAddBatchOpen(true)}
+                onOpenTwin={(id) => setSelectedTwinBatchId(id)}
+                onOpenDecision={(id) => setSelectedDecisionBatchId(id)}
+                onOpenSimulator={handleOpenSimulatorFromBatch}
+                onOpenAssist={() => setIsAssistOpen(true)}
+              />
+            )}
 
-        {activeTab === 'pooling' && (
-          <ClusterPoolingView />
-        )}
+            {activeTab === 'simulator' && (
+              <WhatIfSimulator initialBatch={simulatorInitialBatch} />
+            )}
 
-        {activeTab === 'market' && (
-          <MarketIntelligenceView />
-        )}
+            {activeTab === 'pooling' && (
+              <ClusterPoolingView />
+            )}
 
-        {activeTab === 'reports' && (
-          <ReportsAnalyticsView />
-        )}
+            {activeTab === 'market' && (
+              <MarketIntelligenceView />
+            )}
 
-        {activeTab === 'admin' && (
-          <AdminConsoleView />
-        )}
+            {activeTab === 'reports' && (
+              <ReportsAnalyticsView />
+            )}
 
-      </main>
+            {activeTab === 'admin' && (
+              <AdminConsoleView onOpenDiagnostics={() => setActiveTab('diagnostics')} />
+            )}
 
-      {/* Floating Action Button for AI Assist (desktop/tablet; mobile uses sticky Header AI button) */}
-      <button
-        type="button"
-        onClick={() => setIsAssistOpen(true)}
-        className="hidden sm:flex fixed bottom-6 right-6 z-40 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white p-4 rounded-2xl shadow-xl shadow-emerald-600/30 items-center space-x-2 transition-all hover:scale-105 group"
-        title="Chat with AgriNexus Assist (Voice / Text)"
-      >
-        <Sparkles className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-        <span className="font-bold text-xs">{t('ask_ai')}</span>
-      </button>
+            {activeTab === 'diagnostics' && currentUser?.role === 'admin' && (
+              <SystemDiagnosticsView />
+            )}
+          </Suspense>
+        </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 sm:pr-44 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p>© 2026 AgriNexus — AI-Powered Post-Harvest Decision Intelligence.</p>
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-slate-400 text-[11px]">
-            <span>ICAR-CIPHET Standards</span>
-            <span>•</span>
-            <span>Agmarknet / eNAM Synced</span>
-            <span>•</span>
-            <span>Q10 Kinetic Modeling</span>
+        {/* Floating Action Button for AI Assist (desktop/tablet; mobile uses sticky Header AI button) */}
+        <button
+          type="button"
+          onClick={() => setIsAssistOpen(true)}
+          className="hidden sm:flex fixed bottom-6 right-6 z-40 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white p-4 rounded-2xl shadow-xl shadow-emerald-600/30 items-center space-x-2 transition-all hover:scale-105 group"
+          title="Chat with AgriNexus Assist (Voice / Text)"
+        >
+          <Sparkles className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+          <span className="font-bold text-xs">{t('ask_ai')}</span>
+        </button>
+
+        {/* Footer */}
+        <footer className="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-500">
+          <div className="max-w-7xl mx-auto px-4 sm:pr-44 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <p>© 2026 AgriNexus — AI-Powered Post-Harvest Decision Intelligence.</p>
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-slate-400 text-[11px]">
+              <span>ICAR-CIPHET Standards</span>
+              <span>•</span>
+              <span>Agmarknet / eNAM Reference</span>
+              <span>•</span>
+              <span>Q10 Kinetic Modeling</span>
+            </div>
           </div>
-        </div>
-      </footer>
+        </footer>
 
-      {/* Modals & Slide-out Drawers */}
-      <LoginModal
-        isOpen={isLoginModalOpen}
-        onClose={() => setIsLoginModalOpen(false)}
-      />
+        {/* Modals & Slide-out Drawers */}
+        <Suspense fallback={null}>
+          {isLoginModalOpen && (
+            <LoginModal
+              isOpen={isLoginModalOpen}
+              onClose={() => setIsLoginModalOpen(false)}
+            />
+          )}
 
-      <NotificationDrawer
-        isOpen={isNotifsOpen}
-        onClose={() => setIsNotifsOpen(false)}
-        notifications={notifications}
-        onMarkRead={handleMarkRead}
-        onMarkAllRead={handleMarkAllRead}
-      />
+          {isNotifsOpen && (
+            <NotificationDrawer
+              isOpen={isNotifsOpen}
+              onClose={() => setIsNotifsOpen(false)}
+              notifications={notifications}
+              onMarkRead={handleMarkRead}
+              onMarkAllRead={handleMarkAllRead}
+            />
+          )}
 
-      <AddBatchModal
-        isOpen={isAddBatchOpen}
-        onClose={() => setIsAddBatchOpen(false)}
-        onBatchAdded={() => fetchBatches()}
-      />
+          {isAddBatchOpen && (
+            <AddBatchModal
+              isOpen={isAddBatchOpen}
+              onClose={() => setIsAddBatchOpen(false)}
+              onBatchAdded={() => fetchBatches()}
+            />
+          )}
 
-      <DigitalTwinModal
-        isOpen={!!selectedTwinBatchId}
-        onClose={() => setSelectedTwinBatchId(null)}
-        batchId={selectedTwinBatchId}
-        onSimulate={handleOpenSimulatorFromBatch}
-      />
+          {selectedTwinBatchId && (
+            <DigitalTwinModal
+              isOpen={!!selectedTwinBatchId}
+              onClose={() => setSelectedTwinBatchId(null)}
+              batchId={selectedTwinBatchId}
+              onSimulate={handleOpenSimulatorFromBatch}
+            />
+          )}
 
-      <DecisionBreakdownModal
-        isOpen={!!selectedDecisionBatchId}
-        onClose={() => setSelectedDecisionBatchId(null)}
-        batchId={selectedDecisionBatchId}
-        onConfirmed={() => fetchBatches()}
-      />
+          {selectedDecisionBatchId && (
+            <DecisionBreakdownModal
+              isOpen={!!selectedDecisionBatchId}
+              onClose={() => setSelectedDecisionBatchId(null)}
+              batchId={selectedDecisionBatchId}
+              onConfirmed={() => fetchBatches()}
+            />
+          )}
 
-      <AgriNexusAssistModal
-        isOpen={isAssistOpen}
-        onClose={() => setIsAssistOpen(false)}
-        activeBatches={batches}
-      />
+          {isAssistOpen && (
+            <AgriNexusAssistModal
+              isOpen={isAssistOpen}
+              onClose={() => setIsAssistOpen(false)}
+              activeBatches={batches}
+            />
+          )}
+        </Suspense>
 
-    </div>
+      </div>
+    </ErrorBoundary>
   );
 }

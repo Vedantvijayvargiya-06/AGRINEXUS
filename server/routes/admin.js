@@ -6,9 +6,20 @@ import {
   getUserById,
   updateUserApproval,
   getSystemCounts,
-  getDatabaseStatus
+  getDatabaseStatus,
+  listErrorLogs,
+  resolveErrorLog,
+  clearResolvedErrorLogs,
+  insertErrorLog,
+  insertDiagnosticRun,
+  listDiagnosticRuns
 } from '../store.js';
-import { requireAuth, requireRole, HttpError } from '../security.js';
+import {
+  getDiagnosticsOverview,
+  runDiagnosticSuite,
+  classifyAndSanitizeError
+} from '../services/diagnosticsService.js';
+import { requireAuth, requireRole, checkRateLimit, HttpError } from '../security.js';
 
 const router = Router();
 
@@ -107,18 +118,86 @@ router.get('/system-health', requireRole('admin', 'fpo_admin'), (req, res) => {
   const dbStatus = getDatabaseStatus();
 
   res.json({
-    status: 'healthy',
-    api_uptime_pct: 99.9,
-    sync_latency_ms: 12,
+    status: dbStatus.connected && dbStatus.integrity === 'ok' ? 'healthy' : 'degraded',
+    uptime_seconds: Math.floor(process.uptime()),
+    db_latency_ms: dbStatus.query_latency_ms,
     database: dbStatus.engine,
+    database_integrity: dbStatus.integrity,
     prediction_engine: 'Q10 Decay + Linear Optimization (Operational)',
     rag_assistant: 'Active & Grounded',
     total_registered_users: counts.totalUsers,
     total_batches: counts.totalBatches,
     total_active_batches: counts.activeBatches,
     active_clusters: counts.totalClusters,
+    unresolved_errors: counts.unresolvedErrors,
     timestamp: new Date().toISOString()
   });
+});
+
+// --- System Admin Health & Diagnostics Routes (strictly restricted to admin) ---
+router.get('/diagnostics/overview', requireRole('admin'), (req, res) => {
+  const includeResolved = req.query.include_resolved !== 'false';
+  const errorLogs = listErrorLogs({ limit: 50, includeResolved });
+  const diagnosticRuns = listDiagnosticRuns(15);
+  res.json(getDiagnosticsOverview({ errorLogs, diagnosticRuns }));
+});
+
+router.post('/diagnostics/run', requireRole('admin'), (req, res, next) => {
+  try {
+    const scope = String(req.body?.scope || 'full').trim();
+    const runResult = runDiagnosticSuite(scope);
+    const saved = insertDiagnosticRun({
+      ...runResult,
+      triggered_by_user_id: req.currentUser.id
+    });
+    res.json(saved);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/diagnostics/errors/:id/resolve', requireRole('admin'), (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new HttpError(400, 'Invalid error log ID');
+    }
+    const updated = resolveErrorLog(id);
+    if (!updated) {
+      throw new HttpError(404, 'Error log entry not found');
+    }
+    res.json({ status: 'resolved', id });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/diagnostics/errors/resolved', requireRole('admin'), (req, res) => {
+  const removed = clearResolvedErrorLogs();
+  res.json({ status: 'cleared', removed_count: removed });
+});
+
+// Authenticated frontend error reporter (captures real unexpected UI / API failures safely)
+router.post('/diagnostics/client-error', requireAuth, (req, res, next) => {
+  try {
+    checkRateLimit(`client_err:${req.currentUser.id}`, 20, 60);
+    const body = req.body || {};
+    const message = String(body.message || '').trim();
+    if (!message) {
+      throw new HttpError(400, 'Error message is required');
+    }
+    const sanitized = classifyAndSanitizeError({
+      err: { message },
+      req: { method: body.method || 'UI', originalUrl: body.endpoint || '/frontend' },
+      statusCode: Number(body.status_code) || 500,
+      source: 'frontend',
+      module: String(body.module || 'react-ui')
+    });
+    const entry = insertErrorLog(sanitized);
+    res.status(201).json({ recorded: true, id: entry.id });
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;

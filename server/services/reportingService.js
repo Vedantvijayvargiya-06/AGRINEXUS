@@ -18,7 +18,7 @@ export class ReportingService {
     const totalQuantityTonnes = round(totalQuantityKg / 1000.0, 2);
 
     const totalValueRealized = batches.reduce(
-      (acc, b) => acc + (b.realized_value ?? b.best_expected_value ?? 15000),
+      (acc, b) => acc + (b.realized_value ?? b.best_expected_value ?? 0),
       0
     );
 
@@ -34,11 +34,15 @@ export class ReportingService {
     );
 
     const totalIndividualFreight = clusters.reduce(
-      (acc, c) => acc + (c.individual_cost_total ?? 4500),
+      (acc, c) => acc + (c.individual_cost_total ?? 0),
       0
     );
     const totalPooledFreight = clusters.reduce(
-      (acc, c) => acc + (c.pooled_cost_total ?? 1800),
+      (acc, c) => acc + (c.pooled_cost_total ?? 0),
+      0
+    );
+    const totalClusteredKg = clusters.reduce(
+      (acc, c) => acc + (c.total_quantity_kg ?? 0),
       0
     );
     const totalFreightSavings = Math.max(
@@ -47,8 +51,12 @@ export class ReportingService {
     );
     const avgFreightSavingsPct =
       totalIndividualFreight > 0
-        ? round((totalFreightSavings / Math.max(1.0, totalIndividualFreight)) * 100.0, 1)
-        : 58.0;
+        ? round((totalFreightSavings / totalIndividualFreight) * 100.0, 1)
+        : 0.0;
+    const avgSoloCostPerKg =
+      totalClusteredKg > 0 ? round(totalIndividualFreight / totalClusteredKg, 2) : 0.0;
+    const avgPooledCostPerKg =
+      totalClusteredKg > 0 ? round(totalPooledFreight / totalClusteredKg, 2) : 0.0;
 
     const cropDistribution = {};
     for (const b of batches) {
@@ -75,6 +83,8 @@ export class ReportingService {
       spoilage_tonnes_prevented: spoilageTonnesPrevented,
       total_freight_savings_inr: totalFreightSavings,
       avg_freight_savings_pct: avgFreightSavingsPct,
+      avg_solo_cost_per_kg: avgSoloCostPerKg,
+      avg_pooled_cost_per_kg: avgPooledCostPerKg,
       active_clusters_count: clusters.length,
       crop_distribution: cropDistribution,
       decision_distribution: decisionCounts,

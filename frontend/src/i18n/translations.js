@@ -19,6 +19,7 @@ export const translations = {
     nav_market: "Mandi Market",
     nav_reports: "FPO Reports",
     nav_admin: "Admin Console",
+    nav_diagnostics: "Diagnostics",
     nav_assist: "AgriNexus Assist",
 
     // Statuses & Sync
@@ -153,6 +154,7 @@ export const translations = {
     nav_market: "मंडी भाव",
     nav_reports: "एफपीओ रिपोर्ट्स",
     nav_admin: "एडमिन कंसोल",
+    nav_diagnostics: "सिस्टम जांच",
     nav_assist: "एग्रीनेक्सस सहायक",
 
     // Statuses & Sync

@@ -58,7 +58,14 @@ export default function WhatIfSimulator({ initialBatch }) {
     const localNum = parseFloat(localPrice);
     const altNum = parseFloat(alternatePrice);
 
-    if (!Number.isFinite(qtyNum) || qtyNum <= 0) return;
+    if (!Number.isFinite(qtyNum) || qtyNum <= 0 || qtyNum > 1000000) {
+      setSimError('Lot quantity must be between 1 and 1,000,000 kg.');
+      return;
+    }
+    if (!Number.isFinite(qualNum) || qualNum < 1 || qualNum > 100) {
+      setSimError('Quality score must be between 1% and 100%.');
+      return;
+    }
 
     let cancelled = false;
     setLoading(true);
@@ -217,16 +224,49 @@ export default function WhatIfSimulator({ initialBatch }) {
               />
             </div>
             <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              <label htmlFor="sim-quality" className="block text-[11px] font-semibold text-slate-700 mb-1">
                 Quality (%)
               </label>
               <input
+                id="sim-quality"
                 type="number"
                 min="1"
                 max="100"
                 value={currentQuality}
                 onChange={(e) => setCurrentQuality(e.target.value)}
-                className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-900"
+                className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 tabular-nums"
+              />
+            </div>
+          </div>
+
+          {/* Local & Terminal Mandi Prices */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+            <div>
+              <label htmlFor="sim-local-price" className="block text-[11px] font-semibold text-slate-700 mb-1">
+                Local Mandi Price (₹/kg)
+              </label>
+              <input
+                id="sim-local-price"
+                type="number"
+                min="1"
+                step="0.5"
+                value={localPrice}
+                onChange={(e) => setLocalPrice(e.target.value)}
+                className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 tabular-nums"
+              />
+            </div>
+            <div>
+              <label htmlFor="sim-alt-price" className="block text-[11px] font-semibold text-slate-700 mb-1">
+                Terminal Hub Price (₹/kg)
+              </label>
+              <input
+                id="sim-alt-price"
+                type="number"
+                min="1"
+                step="0.5"
+                value={alternatePrice}
+                onChange={(e) => setAlternatePrice(e.target.value)}
+                className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 tabular-nums"
               />
             </div>
           </div>

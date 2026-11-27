@@ -47,6 +47,7 @@ export default function Header({
   }
   if (currentUser?.role === 'admin') {
     navItems.push({ id: 'admin', label: t('nav_admin') });
+    navItems.push({ id: 'diagnostics', label: t('nav_diagnostics') });
   }
 
   const handleMobileNav = (tabId) => {
@@ -66,7 +67,7 @@ export default function Header({
           <div className="flex items-center space-x-2 min-w-0">
             {!effectiveOnline ? (
               <>
-                <WifiOff className="w-3.5 h-3.5 animate-pulse shrink-0" />
+                <WifiOff className="w-3.5 h-3.5 shrink-0" />
                 <span className="truncate">{t('offline_mode')}: {queuedItems.length} {t('queued_actions')}</span>
               </>
             ) : (
@@ -98,8 +99,8 @@ export default function Header({
       )}
 
       {/* Main Navigation Bar */}
-      <div className="max-w-7xl mx-auto px-2.5 sm:px-4 lg:px-6">
-        <div className="flex items-center justify-between gap-1.5 sm:gap-2 h-16">
+      <div className="max-w-screen-2xl mx-auto px-3 sm:px-4 lg:px-6">
+        <div className="flex items-center justify-between gap-2 lg:gap-3 h-16">
           
           {/* Logo & Brand */}
           <button
@@ -116,17 +117,21 @@ export default function Header({
                   Agri<span className="text-emerald-600">Nexus</span>
                 </span>
               </div>
-              <p className="text-[11px] 2xl:text-xs text-slate-500 hidden xl:block whitespace-nowrap">{t('tagline')}</p>
+              <p className="text-[11px] 2xl:text-xs text-slate-500 hidden 2xl:block whitespace-nowrap">{t('tagline')}</p>
             </div>
           </button>
 
-          {/* Nav Tabs (Desktop - shown on xl+ screens) */}
-          <nav className="hidden xl:flex items-center space-x-1 2xl:space-x-1.5 min-w-0">
+          {/* Nav Tabs (Desktop - shown on xl+ screens, cleanly contained to prevent overlap) */}
+          <nav
+            aria-label="Primary Navigation"
+            className="hidden xl:flex flex-1 min-w-0 items-center justify-center gap-1 2xl:gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden px-1"
+          >
             {navItems.map((item) => (
               <button
                 key={item.id}
+                type="button"
                 onClick={() => setActiveTab(item.id)}
-                className={`px-3 2xl:px-3.5 py-2 rounded-lg text-xs 2xl:text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 rounded-lg text-xs 2xl:text-sm font-medium transition-colors whitespace-nowrap shrink-0 ${
                   activeTab === item.id
                     ? 'bg-emerald-50 text-emerald-700'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -138,12 +143,13 @@ export default function Header({
           </nav>
 
           {/* Action Tools */}
-          <div className="flex items-center space-x-1 sm:space-x-1.5 2xl:space-x-2.5 shrink-0 min-w-0">
+          <div className="flex items-center space-x-1 sm:space-x-1.5 2xl:space-x-2 shrink-0">
             
             {/* AI Assistant Button */}
             <button
+              type="button"
               onClick={onOpenAssist}
-              className="px-2 sm:px-2.5 2xl:px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-xs font-semibold flex items-center space-x-1 shadow-sm shadow-emerald-600/20 transition-all hover:scale-105 shrink-0 whitespace-nowrap"
+              className="px-2 sm:px-2.5 2xl:px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-xs font-semibold flex items-center space-x-1 shadow-sm shadow-emerald-600/20 transition-colors shrink-0 whitespace-nowrap"
               aria-label={t('nav_assist')}
             >
               <Sparkles className="w-3.5 h-3.5 shrink-0" />
@@ -153,6 +159,7 @@ export default function Header({
 
             {/* Language Switcher (top bar on >= sm, also inside mobile menu) */}
             <button
+              type="button"
               onClick={toggleLanguage}
               className="hidden sm:flex px-2 2xl:px-2.5 py-1.5 border border-slate-200 hover:border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 items-center space-x-1 2xl:space-x-1.5 transition-colors shadow-sm shrink-0 whitespace-nowrap"
               title="Toggle Language / भाषा बदलें"
@@ -163,6 +170,7 @@ export default function Header({
 
             {/* Notifications Bell */}
             <button
+              type="button"
               onClick={onOpenNotifs}
               className="relative p-1.5 sm:p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors shrink-0"
               title="Notifications"
@@ -170,29 +178,34 @@ export default function Header({
             >
               <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
               {unreadNotifsCount > 0 && (
-                <span className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-red-500 text-white rounded-full text-[9px] sm:text-[10px] font-bold flex items-center justify-center animate-pulse">
+                <span className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-red-600 text-white rounded-full text-[9px] sm:text-[10px] font-bold flex items-center justify-center tabular-nums">
                   {unreadNotifsCount}
                 </span>
               )}
             </button>
 
             {/* User Profile Badge & Logout Button (sm+ in top bar, mobile inside menu) */}
-            <div className="hidden sm:flex items-center space-x-1.5 2xl:space-x-2 shrink-0">
-              <div className="flex items-center space-x-1.5 2xl:space-x-2 p-1.5 pl-2 pr-2 xl:pr-2.5 rounded-lg border border-slate-200 bg-slate-50">
+            <div className="hidden sm:flex items-center space-x-1.5 shrink-0">
+              <div
+                className="flex items-center space-x-1.5 p-1.5 pl-2 pr-2 rounded-lg border border-slate-200 bg-slate-50"
+                title={`${currentUser?.name || 'User'} (${currentUser?.badge || currentUser?.role || 'Active'})`}
+              >
                 <span className="text-base shrink-0">{currentUser?.avatar || '👤'}</span>
-                <div className="text-left hidden xl:block max-w-[110px] 2xl:max-w-none">
+                <div className="text-left hidden 2xl:block max-w-[120px]">
                   <p className="text-xs font-bold text-slate-800 leading-tight truncate">{currentUser?.name || 'User'}</p>
                   <p className="text-[10px] text-emerald-600 font-semibold truncate">{currentUser?.badge || currentUser?.role || 'Active'}</p>
                 </div>
               </div>
 
               <button
+                type="button"
                 onClick={logout}
                 className="px-2 2xl:px-2.5 py-1.5 border border-slate-200 hover:border-red-200 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-lg text-xs font-semibold flex items-center space-x-1 2xl:space-x-1.5 transition-colors shadow-sm whitespace-nowrap shrink-0"
                 title="Sign out of AgriNexus"
+                aria-label="Sign out of AgriNexus"
               >
                 <LogOut className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden xl:inline">Sign Out</span>
+                <span className="hidden 2xl:inline">Sign Out</span>
               </button>
             </div>
 
@@ -214,7 +227,7 @@ export default function Header({
 
       {/* Responsive Mobile/Tablet Navigation Drawer */}
       {mobileMenuOpen && (
-        <div className="lg:hidden border-t border-slate-200 bg-white px-3 py-3 space-y-3 shadow-lg">
+        <div className="xl:hidden border-t border-slate-200 bg-white px-3 py-3 space-y-3 shadow-lg">
           {/* Mobile Navigation Links */}
           <nav className="flex flex-col space-y-1" aria-label="Mobile Navigation">
             {navItems.map((item) => (

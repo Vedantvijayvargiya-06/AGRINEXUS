@@ -318,10 +318,42 @@ function createSchema(conn) {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS error_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'backend',
+      severity TEXT NOT NULL DEFAULT 'error',
+      module TEXT NOT NULL,
+      method TEXT,
+      endpoint TEXT,
+      status_code INTEGER,
+      message TEXT NOT NULL,
+      root_cause TEXT,
+      recommended_fix TEXT,
+      resolved INTEGER NOT NULL DEFAULT 0,
+      resolved_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS diagnostic_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT NOT NULL UNIQUE,
+      triggered_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      scope TEXT NOT NULL,
+      status TEXT NOT NULL,
+      total_checks INTEGER NOT NULL,
+      passed_checks INTEGER NOT NULL,
+      warning_checks INTEGER NOT NULL,
+      failed_checks INTEGER NOT NULL,
+      duration_ms REAL NOT NULL,
+      results_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_batches_farmer ON batches(farmer_id);
     CREATE INDEX IF NOT EXISTS idx_batches_status ON batches(status);
     CREATE INDEX IF NOT EXISTS idx_recommendations_batch ON recommendations(batch_id);
     CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+    CREATE INDEX IF NOT EXISTS idx_error_logs_resolved ON error_logs(resolved, timestamp DESC);
   `);
 }
 
@@ -730,11 +762,31 @@ export function closeStore() {
 }
 
 export function getDatabaseStatus() {
-  getDb();
+  const conn = getDb();
+  const t0 = performance.now();
+  const quickCheckRow = conn.prepare('PRAGMA quick_check(1)').get();
+  const journalRow = conn.prepare('PRAGMA journal_mode').get();
+  const fkRow = conn.prepare('PRAGMA foreign_keys').get();
+  const latencyMs = Math.round((performance.now() - t0) * 100) / 100;
+
+  let fileSizeBytes = 0;
+  if (activeDbPath !== ':memory:' && fs.existsSync(activeDbPath)) {
+    fileSizeBytes = fs.statSync(activeDbPath).size;
+  }
+
+  const integrityVal = quickCheckRow ? Object.values(quickCheckRow)[0] : 'unknown';
+  const journalVal = journalRow ? Object.values(journalRow)[0] : 'unknown';
+  const fkVal = fkRow ? Boolean(Object.values(fkRow)[0]) : false;
+
   return {
-    engine: activeDbPath === ':memory:' ? 'SQLite (In-Memory Test)' : 'SQLite Persistent (WAL)',
+    engine: activeDbPath === ':memory:' ? 'SQLite (In-Memory Test)' : `SQLite Persistent (${String(journalVal).toUpperCase()})`,
     path: activeDbPath,
-    connected: true
+    connected: true,
+    integrity: String(integrityVal),
+    journal_mode: String(journalVal),
+    foreign_keys_enabled: fkVal,
+    query_latency_ms: latencyMs,
+    file_size_bytes: fileSizeBytes
   };
 }
 
@@ -922,7 +974,7 @@ export function getMarketPriceById(id) {
 
 export function updateMarketPriceAndNotifyFarmers(
   marketPriceId,
-  { modal_price_per_kg, trend, price_change_pct },
+  { modal_price_per_kg, min_price_per_kg, max_price_per_kg, trend, price_change_pct },
   notifications
 ) {
   const conn = getDb();
@@ -932,12 +984,23 @@ export function updateMarketPriceAndNotifyFarmers(
       .prepare(
         `
       UPDATE market_prices
-      SET modal_price_per_kg = ?, trend = ?, price_change_pct = ?,
+      SET modal_price_per_kg = ?,
+          min_price_per_kg = COALESCE(?, min_price_per_kg),
+          max_price_per_kg = COALESCE(?, max_price_per_kg),
+          trend = ?, price_change_pct = ?,
           is_manual_override = 1, source_type = 'admin_override', fetched_at = ?
       WHERE id = ?
     `
       )
-      .run(modal_price_per_kg, trend, price_change_pct, nowIso, Number(marketPriceId));
+      .run(
+        modal_price_per_kg,
+        min_price_per_kg ?? null,
+        max_price_per_kg ?? null,
+        trend,
+        price_change_pct,
+        nowIso,
+        Number(marketPriceId)
+      );
 
     const insertNotif = conn.prepare(`
       INSERT INTO notifications (
@@ -962,6 +1025,35 @@ export function updateMarketPriceAndNotifyFarmers(
     }
     return getMarketPriceById(marketPriceId);
   });
+}
+
+export function insertRecommendationForBatch(batchId, recData) {
+  const nowIso = new Date().toISOString();
+  getDb()
+    .prepare(
+      `
+      INSERT INTO recommendations (
+        batch_id, recommended_action, net_value_sell, net_value_store,
+        net_value_process, net_value_redirect, best_expected_value,
+        formula_breakdown_json, explanation_en, explanation_hi,
+        confidence_score, generated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `
+    )
+    .run(
+      Number(batchId),
+      recData.recommended_action,
+      recData.net_value_sell,
+      recData.net_value_store,
+      recData.net_value_process,
+      recData.net_value_redirect,
+      recData.best_expected_value,
+      JSON.stringify(recData.formula_breakdown),
+      recData.explanation_en,
+      recData.explanation_hi,
+      recData.confidence_score ?? 0.96,
+      nowIso
+    );
 }
 
 // --- Batches ---
@@ -1333,10 +1425,182 @@ export function getSystemCounts() {
     .prepare("SELECT COUNT(*) AS cnt FROM batches WHERE status = 'active'")
     .get().cnt;
   const totalClusters = conn.prepare('SELECT COUNT(*) AS cnt FROM clusters').get().cnt;
+  const marketPrices = conn.prepare('SELECT COUNT(*) AS cnt FROM market_prices').get().cnt;
+  const notifications = conn.prepare('SELECT COUNT(*) AS cnt FROM notifications').get().cnt;
+  const unresolvedErrors = conn
+    .prepare('SELECT COUNT(*) AS cnt FROM error_logs WHERE resolved = 0')
+    .get().cnt;
   return {
     totalUsers,
     totalBatches,
     activeBatches,
-    totalClusters
+    totalClusters,
+    marketPrices,
+    notifications,
+    unresolvedErrors
   };
 }
+
+// --- Error Logs & Diagnostics ---
+export function insertErrorLog({
+  source = 'backend',
+  severity = 'error',
+  module = 'api',
+  method = null,
+  endpoint = null,
+  status_code = null,
+  message,
+  root_cause = null,
+  recommended_fix = null
+}) {
+  const conn = getDb();
+  const nowIso = new Date().toISOString();
+  const info = conn
+    .prepare(
+      `
+      INSERT INTO error_logs (
+        timestamp, source, severity, module, method, endpoint, status_code,
+        message, root_cause, recommended_fix, resolved, resolved_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)
+    `
+    )
+    .run(
+      nowIso,
+      String(source).slice(0, 32),
+      String(severity).slice(0, 20),
+      String(module).slice(0, 80),
+      method ? String(method).slice(0, 12) : null,
+      endpoint ? String(endpoint).slice(0, 200) : null,
+      status_code !== null && status_code !== undefined ? Number(status_code) : null,
+      String(message || 'Unexpected error').slice(0, 500),
+      root_cause ? String(root_cause).slice(0, 500) : null,
+      recommended_fix ? String(recommended_fix).slice(0, 500) : null
+    );
+
+  // Retain latest 300 logs to keep SQLite compact
+  conn
+    .prepare(
+      'DELETE FROM error_logs WHERE id NOT IN (SELECT id FROM error_logs ORDER BY id DESC LIMIT 300)'
+    )
+    .run();
+
+  return getErrorLogById(Number(info.lastInsertRowid));
+}
+
+function mapErrorLog(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    timestamp: row.timestamp,
+    source: row.source,
+    severity: row.severity,
+    module: row.module,
+    method: row.method,
+    endpoint: row.endpoint,
+    status_code: row.status_code,
+    message: row.message,
+    root_cause: row.root_cause,
+    recommended_fix: row.recommended_fix,
+    resolved: Boolean(row.resolved),
+    resolved_at: row.resolved_at
+  };
+}
+
+export function getErrorLogById(id) {
+  const row = getDb().prepare('SELECT * FROM error_logs WHERE id = ?').get(Number(id));
+  return mapErrorLog(row);
+}
+
+export function listErrorLogs({ limit = 50, includeResolved = true } = {}) {
+  const safeLimit = Math.max(1, Math.min(200, Number(limit) || 50));
+  const where = includeResolved ? '' : 'WHERE resolved = 0';
+  return getDb()
+    .prepare(`SELECT * FROM error_logs ${where} ORDER BY id DESC LIMIT ?`)
+    .all(safeLimit)
+    .map(mapErrorLog);
+}
+
+export function resolveErrorLog(id) {
+  const nowIso = new Date().toISOString();
+  const info = getDb()
+    .prepare('UPDATE error_logs SET resolved = 1, resolved_at = ? WHERE id = ?')
+    .run(nowIso, Number(id));
+  return info.changes > 0;
+}
+
+export function clearResolvedErrorLogs() {
+  const info = getDb().prepare('DELETE FROM error_logs WHERE resolved = 1').run();
+  return info.changes;
+}
+
+function mapDiagnosticRun(row) {
+  if (!row) return null;
+  let results = [];
+  try {
+    results = JSON.parse(row.results_json);
+  } catch {
+    results = [];
+  }
+  return {
+    id: row.id,
+    run_id: row.run_id,
+    triggered_by_user_id: row.triggered_by_user_id,
+    scope: row.scope,
+    status: row.status,
+    total_checks: row.total_checks,
+    passed_checks: row.passed_checks,
+    warning_checks: row.warning_checks,
+    failed_checks: row.failed_checks,
+    duration_ms: row.duration_ms,
+    results,
+    created_at: row.created_at
+  };
+}
+
+export function insertDiagnosticRun(run) {
+  const nowIso = new Date().toISOString();
+  const conn = getDb();
+  const info = conn
+    .prepare(
+      `
+      INSERT INTO diagnostic_runs (
+        run_id, triggered_by_user_id, scope, status, total_checks,
+        passed_checks, warning_checks, failed_checks, duration_ms,
+        results_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `
+    )
+    .run(
+      run.run_id,
+      run.triggered_by_user_id ? Number(run.triggered_by_user_id) : null,
+      run.scope,
+      run.status,
+      run.total_checks,
+      run.passed_checks,
+      run.warning_checks,
+      run.failed_checks,
+      run.duration_ms,
+      JSON.stringify(run.results || []),
+      nowIso
+    );
+
+  // Retain latest 50 diagnostic runs
+  conn
+    .prepare(
+      'DELETE FROM diagnostic_runs WHERE id NOT IN (SELECT id FROM diagnostic_runs ORDER BY id DESC LIMIT 50)'
+    )
+    .run();
+
+  return mapDiagnosticRun(
+    conn.prepare('SELECT * FROM diagnostic_runs WHERE id = ?').get(Number(info.lastInsertRowid))
+  );
+}
+
+export function listDiagnosticRuns(limit = 15) {
+  const safeLimit = Math.max(1, Math.min(50, Number(limit) || 15));
+  return getDb()
+    .prepare('SELECT * FROM diagnostic_runs ORDER BY id DESC LIMIT ?')
+    .all(safeLimit)
+    .map(mapDiagnosticRun);
+}
+

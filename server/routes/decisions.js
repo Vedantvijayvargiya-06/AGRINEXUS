@@ -31,13 +31,17 @@ router.get('/batch/:batchId', requireAuth, (req, res, next) => {
       const marketFeed = listMarketPrices();
       const altMandi = MarketService.getBestAlternateMarket(batch.crop, '', marketFeed);
       const cropOverride = getCropConstant(batch.crop);
+      const elapsedHrs = Math.max(
+        0,
+        (Date.now() - new Date(batch.harvest_time).getTime()) / 3600000
+      );
       return res.json(
         DecisionEngine.evaluateBatchDecision({
           crop: batch.crop,
           quantityKg: batch.quantity_kg,
           currentQuality: batch.current_quality,
           ambientTempC: batch.ambient_temp_c,
-          hoursElapsed: batch.shelf_life_hrs,
+          hoursElapsed: elapsedHrs,
           localMandiPricePerKg: cropOverride?.base_fresh_price_per_kg ?? 26.5,
           alternateMandiPricePerKg: altMandi.modal_price_per_kg,
           cropProfileOverride: cropOverride

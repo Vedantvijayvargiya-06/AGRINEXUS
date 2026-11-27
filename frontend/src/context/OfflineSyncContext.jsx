@@ -11,6 +11,7 @@ export function OfflineSyncProvider({ children }) {
     return saved ? JSON.parse(saved) : [];
   });
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState('');
   const [lastSyncedAt, setLastSyncedAt] = useState(new Date().toLocaleTimeString());
 
   const effectiveOnline = isOnline && !simulatedOffline;
@@ -30,7 +31,7 @@ export function OfflineSyncProvider({ children }) {
 
   const queueAction = (type, payload) => {
     const item = {
-      id: `queue-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       type,
       payload,
       timestamp: new Date().toISOString()
@@ -49,25 +50,45 @@ export function OfflineSyncProvider({ children }) {
     if (queuedItems.length === 0 || !effectiveOnline) return;
 
     setIsSyncing(true);
+    setSyncError('');
+    const remaining = [];
+    let syncedCount = 0;
+
     try {
       for (const item of queuedItems) {
         if (item.type === 'CREATE_BATCH') {
-          const res = await apiFetch('/api/batches', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(item.payload)
-          });
-          if (res.ok && onBatchCreated) {
-            const data = await res.json();
-            onBatchCreated(data);
+          try {
+            const res = await apiFetch('/api/batches', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(item.payload)
+            });
+            if (res.ok) {
+              syncedCount += 1;
+              if (onBatchCreated) {
+                const data = await res.json();
+                onBatchCreated(data);
+              }
+            } else {
+              const errData = await res.json().catch(() => ({}));
+              setSyncError(errData.detail || `Sync failed with status ${res.status}`);
+              remaining.push(item);
+            }
+          } catch (itemErr) {
+            setSyncError(itemErr.message || 'Network error during offline sync');
+            remaining.push(item);
           }
         }
       }
-      setQueuedItems([]);
-      localStorage.removeItem('agrinexus_sync_queue');
-      setLastSyncedAt(new Date().toLocaleTimeString());
-    } catch (err) {
-      console.error('Failed to sync queue:', err);
+      setQueuedItems(remaining);
+      if (remaining.length === 0) {
+        localStorage.removeItem('agrinexus_sync_queue');
+      } else {
+        localStorage.setItem('agrinexus_sync_queue', JSON.stringify(remaining));
+      }
+      if (syncedCount > 0) {
+        setLastSyncedAt(new Date().toLocaleTimeString());
+      }
     } finally {
       setIsSyncing(false);
     }
@@ -82,6 +103,7 @@ export function OfflineSyncProvider({ children }) {
       queueAction,
       syncQueue,
       isSyncing,
+      syncError,
       lastSyncedAt
     }}>
       {children}

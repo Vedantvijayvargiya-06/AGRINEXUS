@@ -140,7 +140,11 @@ export class AgriNexusAssist {
         'खराब',
         'सड़न',
         'गुणवत्ता',
-        'कितने दिन'
+        'कितने दिन',
+        'सेल्फ',
+        'लाइफ',
+        'जीवन',
+        'कितनी'
       ];
       if (shelfKeywords.some((w) => qLower.includes(w))) {
         const ans = isHindi
