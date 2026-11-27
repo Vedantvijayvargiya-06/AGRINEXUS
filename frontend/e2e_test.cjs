@@ -328,10 +328,10 @@ async function runE2ETests() {
         );
 
         if (process.env.E2E_CAPTURE_DEMO_OTP_SCREENSHOTS === '1') {
-          await otpPage.screenshot({ path: '/tmp/agrinexus-demo-otp-desktop.png', fullPage: true });
+          await otpPage.screenshot({ path: path.resolve(__dirname, '.tmp-demo-otp-desktop.png'), fullPage: true });
           await otpPage.setViewportSize({ width: 390, height: 844 });
           await otpPage.waitForTimeout(150);
-          await otpPage.screenshot({ path: '/tmp/agrinexus-demo-otp-mobile.png', fullPage: true });
+          await otpPage.screenshot({ path: path.resolve(__dirname, '.tmp-demo-otp-mobile.png'), fullPage: true });
           await otpPage.setViewportSize({ width: 1440, height: 900 });
         }
 
@@ -362,7 +362,7 @@ async function runE2ETests() {
           { phone: '9876543299', label: 'FPO Admin', expectSelector: 'button:has-text("Export CSV")' },
           { phone: '9876543300', label: 'Buyer', expectSelector: 'table:has-text("Azadpur")' },
           { phone: '9876543399', label: 'System Admin', expectSelector: 'button:has-text("Diagnostics")' },
-          { phone: '9876543210', label: 'Farmer', expectSelector: 'text=Active Batches' }
+          { phone: '9876543211', label: 'Farmer', expectSelector: 'text=Active Batches' }
         ];
 
         for (const scenario of roleScenarios) {
